@@ -8,3 +8,6 @@ data/tiktok_tokens.local.json
 data/tiktok_pkce.local.json
 data/tiktok_*.raw.json
 data/tiktok_*.normalized.csv
+data/*.local.json
+data/*.local.csv
+reports/*.local.md
