@@ -1,0 +1,32 @@
+{
+  "updated_at": "2026-05-01",
+  "source_note": "ユーザーがTikTokアプリとCreative Centerを手動確認して入力した想定データ",
+  "trends": [
+    {
+      "name": "NG行動3つから入る実用系動画",
+      "trending_sounds": ["流行BGM_B", "流行BGM_A"],
+      "video_structures": ["NG提示 > 理由 > 代替案", "悩み提示 > 3選 > 保存促し"],
+      "opening_hooks": ["これやってる人、損してるかも", "知らないと損する"],
+      "editing_tempo": "1.0秒から1.5秒ごとに画面変化。テロップは短く断定しすぎない。",
+      "caption_style": "冒頭に悩み、末尾に保存理由を書く",
+      "genres": ["節約", "掃除", "収納"],
+      "reference_urls": ["https://example.com/ref/trend-001"],
+      "reference_accounts": ["@kurashi_tips_a"],
+      "growth_hypothesis": "悩みが明確で、視聴者が自分ごと化しやすい。保存する理由も作りやすい。",
+      "applicable_points": "節約・掃除ネタでNG行動3つ形式を週2本検証する"
+    },
+    {
+      "name": "Before/Afterを早めに見せる収納動画",
+      "trending_sounds": ["流行BGM_A", "流行BGM_C"],
+      "video_structures": ["Before > 改善手順 > After", "結論 > 実演 > 保存促し"],
+      "opening_hooks": ["狭い部屋でもここまで変わる", "買い足す前に試して"],
+      "editing_tempo": "冒頭2秒でBefore、10秒以内に変化を見せる",
+      "caption_style": "数字と場所を入れる",
+      "genres": ["収納", "片付け"],
+      "reference_urls": ["https://example.com/ref/trend-002"],
+      "reference_accounts": ["@simple_life_b"],
+      "growth_hypothesis": "変化が視覚的に分かりやすく、最後まで見られやすい。",
+      "applicable_points": "玄関、冷蔵庫、調味料収納でBefore/After型を検証する"
+    }
+  ]
+}
