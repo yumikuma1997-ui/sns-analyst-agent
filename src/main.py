@@ -62,7 +62,7 @@ def _add_report_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--llm-model", default=None, help="Model ID for the selected LLM provider.")
     parser.add_argument("--llm-max-input-chars", type=int, default=12000, help="Maximum characters sent to the LLM.")
     parser.add_argument("--llm-max-output-tokens", type=int, default=1200, help="Maximum output tokens requested from the LLM.")
-    parser.add_argument("--output", default="reports/sample_report.md", help="Output Markdown report path.")
+    parser.add_argument("--output", default="reports/analysis_report.local.md", help="Output Markdown report path.")
 
 
 def _add_tiktok_parsers(subparsers: argparse._SubParsersAction) -> None:

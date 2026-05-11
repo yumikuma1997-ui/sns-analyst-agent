@@ -131,7 +131,7 @@ python src/main.py report `
   --creative-notes data/creative_notes.sample.csv `
   --trend-research data/trend_research.sample.csv `
   --competitor-posts data/competitor_posts.sample.csv `
-  --output reports/sample_report.md
+  --output reports/analysis_report.local.md
 ```
 
 実APIから取得したCSVを使う場合:
