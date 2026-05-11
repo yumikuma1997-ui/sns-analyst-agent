@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import csv
+import base64
+import hashlib
 import json
+import secrets
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -85,6 +88,40 @@ class OAuthConfig:
     state: str | None = None
     code_challenge: str | None = None
     code_challenge_method: str = "S256"
+
+
+def generate_code_verifier(length: int = 64) -> str:
+    if length < 43 or length > 128:
+        raise ValueError("PKCE code_verifier length must be between 43 and 128 characters.")
+    token = secrets.token_urlsafe(length)
+    return token[:length]
+
+
+def build_code_challenge(code_verifier: str) -> str:
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+
+
+def create_pkce_pair() -> dict[str, str]:
+    verifier = generate_code_verifier()
+    return {
+        "code_verifier": verifier,
+        "code_challenge": build_code_challenge(verifier),
+        "code_challenge_method": "S256",
+    }
+
+
+def save_pkce_file(path: str | Path, pkce_data: dict[str, str]) -> None:
+    output_path = Path(path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(pkce_data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def load_pkce_file(path: str | Path) -> dict[str, str]:
+    pkce_path = Path(path)
+    if not pkce_path.exists():
+        raise FileNotFoundError(f"PKCE file not found: {pkce_path}")
+    return json.loads(pkce_path.read_text(encoding="utf-8"))
 
 
 def build_authorization_url(config: OAuthConfig) -> str:

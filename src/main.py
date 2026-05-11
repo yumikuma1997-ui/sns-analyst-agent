@@ -13,13 +13,16 @@ from tiktok_api import (
     DEFAULT_VIDEO_FIELDS,
     OAuthConfig,
     build_authorization_url,
+    create_pkce_pair,
     exchange_code_for_token,
     fetch_user_info,
     fetch_video_list,
+    load_pkce_file,
     load_token_file,
     normalize_video_list_file,
     parse_fields,
     refresh_access_token,
+    save_pkce_file,
     save_token_file,
     write_json,
 )
@@ -60,6 +63,10 @@ def _add_tiktok_parsers(subparsers: argparse._SubParsersAction) -> None:
     auth_url.add_argument("--state", default=None)
     auth_url.add_argument("--code-challenge", default=None)
     auth_url.add_argument("--code-challenge-method", default="S256")
+    auth_url.add_argument("--pkce-file", default=None, help="Read or create a PKCE verifier/challenge JSON file.")
+
+    pkce = subparsers.add_parser("create-pkce", help="Create a local PKCE verifier/challenge file.")
+    pkce.add_argument("--output", default="data/tiktok_pkce.local.json")
 
     exchange = subparsers.add_parser("exchange-token", help="Exchange authorization code for access/refresh tokens.")
     exchange.add_argument("--client-key", required=True)
@@ -67,6 +74,7 @@ def _add_tiktok_parsers(subparsers: argparse._SubParsersAction) -> None:
     exchange.add_argument("--code", required=True)
     exchange.add_argument("--redirect-uri", required=True)
     exchange.add_argument("--code-verifier", default=None)
+    exchange.add_argument("--pkce-file", default=None, help="Read code_verifier from a PKCE JSON file.")
     exchange.add_argument("--token-file", default="data/tiktok_tokens.local.json")
 
     refresh = subparsers.add_parser("refresh-token", help="Refresh a saved TikTok access token.")
@@ -114,27 +122,48 @@ def run_report(args: argparse.Namespace) -> int:
 
 
 def run_tiktok(args: argparse.Namespace) -> int:
+    if args.tiktok_command == "create-pkce":
+        pkce_data = create_pkce_pair()
+        save_pkce_file(args.output, pkce_data)
+        print(f"PKCE saved: {Path(args.output).resolve()}")
+        print(f"code_challenge: {pkce_data['code_challenge']}")
+        return 0
+
     if args.tiktok_command == "auth-url":
+        code_challenge = args.code_challenge
+        code_challenge_method = args.code_challenge_method
+        if args.pkce_file:
+            pkce_path = Path(args.pkce_file)
+            if pkce_path.exists():
+                pkce_data = load_pkce_file(pkce_path)
+            else:
+                pkce_data = create_pkce_pair()
+                save_pkce_file(pkce_path, pkce_data)
+            code_challenge = pkce_data["code_challenge"]
+            code_challenge_method = pkce_data.get("code_challenge_method", "S256")
         url = build_authorization_url(
             OAuthConfig(
                 client_key=args.client_key,
                 redirect_uri=args.redirect_uri,
                 scopes=parse_fields(args.scopes, DEFAULT_SCOPES),
                 state=args.state,
-                code_challenge=args.code_challenge,
-                code_challenge_method=args.code_challenge_method,
+                code_challenge=code_challenge,
+                code_challenge_method=code_challenge_method,
             )
         )
         print(url)
         return 0
 
     if args.tiktok_command == "exchange-token":
+        code_verifier = args.code_verifier
+        if args.pkce_file:
+            code_verifier = load_pkce_file(args.pkce_file)["code_verifier"]
         token_data = exchange_code_for_token(
             client_key=args.client_key,
             client_secret=args.client_secret,
             code=args.code,
             redirect_uri=args.redirect_uri,
-            code_verifier=args.code_verifier,
+            code_verifier=code_verifier,
         )
         save_token_file(args.token_file, token_data)
         print(f"Token saved: {Path(args.token_file).resolve()}")

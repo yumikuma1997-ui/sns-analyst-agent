@@ -10,7 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from tiktok_api import (
     OAuthConfig,
+    build_code_challenge,
     build_authorization_url,
+    create_pkce_pair,
     normalize_video_list_raw,
     write_normalized_videos_csv,
 )
@@ -35,6 +37,12 @@ class TikTokApiTest(unittest.TestCase):
         self.assertEqual(query["response_type"], ["code"])
         self.assertEqual(query["state"], ["state123"])
         self.assertEqual(query["code_challenge"], ["challenge"])
+
+    def test_pkce_pair(self):
+        pkce = create_pkce_pair()
+        self.assertGreaterEqual(len(pkce["code_verifier"]), 43)
+        self.assertEqual(pkce["code_challenge"], build_code_challenge(pkce["code_verifier"]))
+        self.assertEqual(pkce["code_challenge_method"], "S256")
 
     def test_normalize_video_list_raw(self):
         raw = {
