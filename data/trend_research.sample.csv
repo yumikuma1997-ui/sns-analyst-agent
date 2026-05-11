@@ -1,4 +1,0 @@
-trend_date,source,region,industry,trend_type,trend_name,example_url,observed_hook,observed_structure,observed_cta,observed_duration,observed_text_style,applicability_to_account,should_use,reason,adaptation_idea
-2026-05-10,TikTok Creative Center,JP,beauty,product_keyword,Qoo10メガ割,,買う前にこれだけ確認,候補比較→注意点→向く人,保存促し,20-35秒,要点多め,美容購入体験に直結,true,購入前ニーズと合う,Qoo10メガ割で失敗しにくい韓国コスメの選び方
-2026-05-10,TikTokアプリ検索,JP,beauty,hook,正直レビュー,,正直に言うと微妙な点もある,良い点→微妙な点→おすすめできる人,コメント誘導,20-45秒,中密度,PR投稿の信頼性に使える,true,PRでも本音感を出せる,PR商品を正直レビューするときの見方
-2026-05-10,Google Trends,JP,beauty,seasonal_keyword,紫外線ケア,,買う前にSPF以外も見て,悩み→選び方→注意点,保存促し,20-35秒,中密度,季節性がある,true,季節需要がある,日焼け止めを買う前に見るべき3点

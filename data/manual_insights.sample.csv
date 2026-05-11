@@ -1,5 +1,0 @@
-video_id,saves,profile_views,follows_from_video,average_watch_time,completion_rate,traffic_source_for_you,traffic_source_profile,traffic_source_following,traffic_source_search,audience_gender,audience_age_range,audience_region,measured_after_hours,insight_note
-v001,96,44,6,18,0.48,0.82,0.04,0.06,0.08,女性多め,18-34,日本,72,保存理由が明確
-v002,140,61,9,21,0.51,0.79,0.05,0.04,0.12,女性多め,18-34,日本,72,比較軸が分かりやすい
-v003,28,18,1,16,0.32,0.71,0.06,0.08,0.15,女性多め,18-34,日本,72,PRの注意点を追加したい
-v005,260,120,13,17,0.46,0.86,0.03,0.03,0.08,女性多め,18-34,日本,72,色比較で保存が多い

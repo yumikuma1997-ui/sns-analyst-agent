@@ -1,4 +1,0 @@
-competitor_account,account_url,post_url,content_category,view_count,like_count,comment_count,share_count,duration,hook_text,hook_type,video_structure,cta_type,text_density,observed_strength,should_adapt,adaptation_target,notes
-@beauty_ref_a,https://www.tiktok.com/@beauty_ref_a,https://www.tiktok.com/@beauty_ref_a/video/1,リップ比較,120000,6800,90,210,24,そのリップ買う前にこの3つ見て,損失回避,悩み提示→比較3点→向く人,保存促し,中,買う前の不安を先に言う,true,hook,テーマではなくフック構造だけ参考
-@beauty_ref_b,https://www.tiktok.com/@beauty_ref_b,https://www.tiktok.com/@beauty_ref_b/video/2,スキンケアレビュー,90000,4200,55,160,32,正直微妙だったところも言う,正直レビュー,良い点→微妙な点→おすすめできる人,コメント誘導,中,本音感で信頼を作る,true,structure,構成だけ参考
-@beauty_ref_c,https://www.tiktok.com/@beauty_ref_c,https://www.tiktok.com/@beauty_ref_c/video/3,ベースメイク比較,65000,3000,40,88,38,初心者がやりがちな失敗,初心者向け,失敗例→理由→直し方,保存促し,高,テロップが比較しやすい,true,text_density,テロップ密度だけ参考

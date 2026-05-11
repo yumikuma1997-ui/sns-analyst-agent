@@ -51,18 +51,18 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _add_report_args(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--account", default="data/account_profile.sample.json", help="Path to account profile JSON.")
-    parser.add_argument("--api-posts", "--posts", dest="api_posts", default="data/api_posts.sample.csv", help="Path to official API posts CSV/JSON.")
-    parser.add_argument("--manual-insights", default="data/manual_insights.sample.csv", help="Path to manually entered TikTok Studio insight CSV/JSON.")
-    parser.add_argument("--creative-notes", default="data/creative_notes.sample.csv", help="Path to manually entered creative notes CSV/JSON.")
-    parser.add_argument("--trend-research", "--trends", dest="trend_research", default="data/trend_research.sample.csv", help="Path to manually researched trend CSV/JSON.")
-    parser.add_argument("--competitor-posts", default="data/competitor_posts.sample.csv", help="Path to competitor/reference post pattern CSV/JSON.")
+    parser.add_argument("--account", default="data/account_profile.local.json", help="Path to account profile JSON.")
+    parser.add_argument("--api-posts", "--posts", dest="api_posts", default="data/tiktok_videos.local.csv", help="Path to official API posts CSV/JSON.")
+    parser.add_argument("--manual-insights", default="data/manual_insights.local.csv", help="Path to manually entered TikTok Studio insight CSV/JSON.")
+    parser.add_argument("--creative-notes", default="data/creative_notes.local.csv", help="Path to manually entered creative notes CSV/JSON.")
+    parser.add_argument("--trend-research", "--trends", dest="trend_research", default="data/trend_research.local.csv", help="Path to manually researched trend CSV/JSON.")
+    parser.add_argument("--competitor-posts", default="data/competitor_posts.local.csv", help="Path to competitor/reference post pattern CSV/JSON.")
     parser.add_argument("--competitors", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--llm-provider", default="none", choices=["none", "openai", "anthropic"], help="Optional external LLM provider.")
     parser.add_argument("--llm-model", default=None, help="Model ID for the selected LLM provider.")
     parser.add_argument("--llm-max-input-chars", type=int, default=12000, help="Maximum characters sent to the LLM.")
     parser.add_argument("--llm-max-output-tokens", type=int, default=1200, help="Maximum output tokens requested from the LLM.")
-    parser.add_argument("--output", default="reports/analysis_report.local.md", help="Output Markdown report path.")
+    parser.add_argument("--output", default="reports/tiktok_api_report.local.md", help="Output Markdown report path.")
 
 
 def _add_tiktok_parsers(subparsers: argparse._SubParsersAction) -> None:

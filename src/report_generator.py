@@ -56,10 +56,6 @@ def _executive_summary(lines: list[str], analysis: dict[str, Any]) -> None:
 
 def _section_0(lines: list[str], analysis: dict[str, Any]) -> None:
     scope = analysis["data_scope"]
-    input_files = analysis.get("input_files", {})
-    competitor_note = ""
-    if "sample" in str(input_files.get("competitor_posts", "")):
-        competitor_note = "（現在はサンプルファイルのため、実アカウント判断には使いすぎないでください）"
     lines.extend(
         [
             "## 0. データ取得・分析範囲",
@@ -68,7 +64,7 @@ def _section_0(lines: list[str], analysis: dict[str, Any]) -> None:
             "- 手入力インサイト: manual_insights.csv の保存数、完視聴率、平均視聴時間、流入元など",
             "- 手入力クリエイティブメモ: creative_notes.csv の冒頭3秒、動画構成、CTA、PR有無など",
             "- トレンド調査データ: trend_research.csv に手動調査したCreative Center / Google Trends等の結果のみ",
-            f"- 競合・参考アカウントデータ: competitor_posts.csv。取り入れるのはテーマではなく型のみです。{competitor_note}",
+            "- 競合・参考アカウントデータ: competitor_posts.csv。取り入れるのはテーマではなく型のみです。",
             f"- 今回取れていない指標: {safe_join(scope['not_available_via_basic_api'])}",
             "- APIでは通常取れないため手入力が必要な指標: 保存率、プロフィール遷移率、フォロー転換率、完視聴率、平均視聴維持率、流入元、冒頭3秒、動画構成、CTA",
             f"- API集計信頼度: {scope['api_aggregation_confidence']}",

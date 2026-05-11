@@ -1,14 +1,22 @@
 # TikTok Analysis Tool
 
-TikTok公式APIで取得できる公開動画データと、運用者が手入力するTikTok Studio / クリエイティブ / トレンド / 参考アカウントメモを分けて分析するローカルCLIツールです。
+TikTok公式APIで取得した自アカウントの公開動画データと、運用者が手入力するTikTok Studio / クリエイティブ / トレンド / 参考アカウントメモを分けて分析するローカルCLIツールです。
 
 このツールはスクレイピング、自動ログイン、自動投稿、自動いいね、自動フォロー、自動コメントを行いません。
 
 ## 入力ファイル
 
-### `data/api_posts.sample.csv`
+このリポジトリでは、実データを `.local.*` ファイルとして扱います。`.local.*` は `.gitignore` 対象です。
 
-TikTok公式APIから取得できる投稿データです。主なカラム:
+### `data/account_profile.local.json`
+
+自アカウントの基本情報です。ジャンル、想定ターゲット、運用目的、投稿可能頻度などを入力します。
+
+### `data/tiktok_videos.local.csv`
+
+TikTok公式APIから取得・正規化した投稿データです。
+
+主なカラム:
 
 - `video_id`
 - `create_time`
@@ -47,7 +55,7 @@ TikTok公式APIから取得できる投稿データです。主なカラム:
 - 直近30日中央値
 - 外れ値バズ投稿候補
 
-### `data/manual_insights.sample.csv`
+### `data/manual_insights.local.csv`
 
 TikTok Studioやアプリ内インサイトから手動転記する深い指標です。
 
@@ -65,7 +73,7 @@ TikTok Studioやアプリ内インサイトから手動転記する深い指標�
 
 このファイルがない場合、保存率、フォロー転換率、完視聴率、平均視聴時間、プロフィール遷移率は「データ不足」と表示します。
 
-### `data/creative_notes.sample.csv`
+### `data/creative_notes.local.csv`
 
 運用者が動画を見て記録する定性メモです。
 
@@ -92,11 +100,11 @@ TikTok Studioやアプリ内インサイトから手動転記する深い指標�
 - `personal`
 - `unrelated`
 
-### `data/trend_research.sample.csv`
+### `data/trend_research.local.csv`
 
 TikTok Creative Center、TikTokアプリ内検索、Google Trendsなどを手動調査して記録するファイルです。自動取得はしません。
 
-### `data/competitor_posts.sample.csv`
+### `data/competitor_posts.local.csv`
 
 参考アカウント・競合アカウントの手動調査結果です。
 
@@ -120,18 +128,7 @@ TikTok Creative Center、TikTokアプリ内検索、Google Trendsなどを手動
 
 ## レポート生成
 
-```powershell
-python src/main.py report `
-  --account data/account_profile.sample.json `
-  --api-posts data/api_posts.sample.csv `
-  --manual-insights data/manual_insights.sample.csv `
-  --creative-notes data/creative_notes.sample.csv `
-  --trend-research data/trend_research.sample.csv `
-  --competitor-posts data/competitor_posts.sample.csv `
-  --output reports/analysis_report.local.md
-```
-
-実APIから取得したCSVを使う場合:
+実データに対してのみレポートを生成します。
 
 ```powershell
 python src/main.py report `
@@ -144,7 +141,7 @@ python src/main.py report `
   --output reports/tiktok_api_report.local.md
 ```
 
-`manual_insights`、`creative_notes`、`trend_research`、`competitor_posts` は存在しなくても実行できます。その場合、レポート内に不足理由と入力先が表示されます。
+`manual_insights.local.csv`、`creative_notes.local.csv`、`trend_research.local.csv`、`competitor_posts.local.csv` は存在しなくても実行できます。その場合、レポート内に不足理由と入力先が表示されます。
 
 ## レポートの考え方
 
@@ -161,9 +158,9 @@ python src/main.py report `
 
 `manual_insights` / `creative_notes` / `trend_research` / `competitor_posts` のいずれかが0件の場合、戦略提案信頼度はC以下に制限されます。
 
-保存率、プロフィール遷移率、フォロー転換率、完視聴率、平均視聴維持率、流入元別成果は、`manual_insights.csv` に入力がない限り分析しません。
+保存率、プロフィール遷移率、フォロー転換率、完視聴率、平均視聴維持率、流入元別成果は、`manual_insights.local.csv` に入力がない限り分析しません。
 
-冒頭3秒、動画構成、CTA、顔出し、声出し、PR有無、テロップ密度は、`creative_notes.csv` に入力がない限り断定しません。
+冒頭3秒、動画構成、CTA、顔出し、声出し、PR有無、テロップ密度は、`creative_notes.local.csv` に入力がない限り断定しません。
 
 ## TikTok公式API PoC
 
