@@ -3,38 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from models import PostMetric
+from confidence import confidence_description
 from utils import DATA_INSUFFICIENT, format_bool, format_number, format_percent, safe_join
-
-
-def generate_markdown_report(analysis: dict[str, Any]) -> str:
-    account = analysis["account"]
-    summary = analysis["summary"]
-    performance = analysis["performance"]
-    habits = analysis["habits"]
-    trend_analysis = analysis["trend_analysis"]
-    competitor_analysis = analysis["competitor_analysis"]
-    strategy = analysis["strategy"]
-
-    lines: list[str] = []
-    lines.append("# TikTokアカウント分析レポート")
-    lines.append("")
-    lines.extend(_section_conclusion(strategy))
-    lines.extend(_section_account(account, strategy, habits))
-    lines.extend(_section_summary(summary))
-    lines.extend(_section_top_posts(performance))
-    lines.extend(_section_weak_posts(performance))
-    lines.extend(_section_habits(habits))
-    lines.extend(_section_trends(trend_analysis))
-    lines.extend(_section_competitors(competitor_analysis))
-    lines.extend(_section_profile(strategy, account))
-    lines.extend(_section_video_ideas(analysis["video_ideas"]))
-    lines.extend(_section_operation_plan(analysis["operation_plan"]))
-    lines.extend(_section_kpi_design(analysis["kpi_design"]))
-    lines.extend(_section_hypotheses(analysis["hypotheses"]))
-    lines.extend(_section_backlog(analysis["backlog"]))
-    lines.extend(_section_llm_analysis(analysis.get("llm_analysis")))
-    return "\n".join(lines).rstrip() + "\n"
 
 
 def write_markdown_report(analysis: dict[str, Any], output_path: str | Path) -> None:
@@ -43,182 +13,326 @@ def write_markdown_report(analysis: dict[str, Any], output_path: str | Path) -> 
     path.write_text(generate_markdown_report(analysis), encoding="utf-8")
 
 
-def _section_conclusion(strategy: dict[str, Any]) -> list[str]:
-    return [
-        "## 1. 結論",
-        f"- 現在のアカウントの状態: {strategy['current_state']}",
-        f"- 最大の課題: {strategy['biggest_issue']}",
-        f"- 最優先で改善すべきこと: {strategy['first_priority']}",
-        f"- 今後30日間の方針: {strategy['thirty_day_policy']}",
-        "",
-    ]
+def generate_markdown_report(analysis: dict[str, Any]) -> str:
+    lines: list[str] = ["# TikTokアカウント分析レポート", ""]
+    _section_0(lines, analysis)
+    _section_1(lines, analysis)
+    _section_2(lines, analysis)
+    _section_3(lines, analysis)
+    _section_4(lines, analysis)
+    _section_5(lines, analysis)
+    _section_6(lines, analysis)
+    _section_7(lines, analysis)
+    _section_8(lines, analysis)
+    _section_9(lines, analysis)
+    _section_10(lines, analysis)
+    _section_11(lines, analysis)
+    _section_12(lines, analysis)
+    _section_13(lines, analysis)
+    _section_14(lines, analysis)
+    _section_15(lines, analysis)
+    _section_16(lines, analysis)
+    _section_17(lines, analysis)
+    _section_18(lines, analysis)
+    return "\n".join(lines).rstrip() + "\n"
 
 
-def _section_account(account: dict[str, Any], strategy: dict[str, Any], habits: dict[str, Any]) -> list[str]:
-    return [
-        "## 2. アカウント概要",
-        f"- ジャンル: {account['genre']}",
-        f"- 想定ターゲット: {account['target_audience']}",
-        f"- 現在の運用状況: 投稿頻度 {format_frequency(habits['weekly_frequency'])}、投稿可能頻度 {account['postable_frequency']}",
-        f"- 目標: 現在 {format_number(account['current_followers'])} フォロワー / 目標 {format_number(account['target_followers'])} フォロワー",
-        f"- 投稿頻度: {format_frequency(habits['weekly_frequency'])}",
-        f"- 現在の強み: {safe_join(strategy['strengths'])}",
-        f"- 現在の弱み: {safe_join(strategy['weaknesses'])}",
-        f"- 顔出し: {format_bool(account['face_reveal'])} / 声出し: {format_bool(account['voice_available'])}",
-        f"- 避けたい表現: {account['avoid_expressions']}",
-        "",
-    ]
+def _section_0(lines: list[str], analysis: dict[str, Any]) -> None:
+    scope = analysis["data_scope"]
+    input_files = analysis.get("input_files", {})
+    competitor_note = ""
+    if "sample" in str(input_files.get("competitor_posts", "")):
+        competitor_note = "（現在はサンプルファイルのため、実アカウント判断には使いすぎないでください）"
+    lines.extend(
+        [
+            "## 0. データ取得・分析範囲",
+            f"- 使用データ一覧: API投稿 {scope['api_post_count']}本 / 手入力インサイト {scope['manual_insight_count']}件 / クリエイティブメモ {scope['creative_note_count']}件 / トレンド調査 {scope['trend_research_count']}件 / 参考投稿 {scope['competitor_post_count']}件",
+            f"- API取得データ: {safe_join(scope['api_fields'])}",
+            "- 手入力インサイト: manual_insights.csv に保存数、完視聴率、平均視聴時間、流入元などを転記",
+            "- 手入力クリエイティブメモ: creative_notes.csv に冒頭3秒、構成、CTA、PR有無などを記録",
+            "- トレンド調査データ: trend_research.csv。Creative CenterやGoogle Trendsの手動調査結果のみ使用",
+            f"- 競合・参考アカウントデータ: competitor_posts.csv。型だけを参考にし、テーマや台本はコピーしない{competitor_note}",
+            f"- 今回取れていない指標: {safe_join(scope['not_available_via_basic_api'])}",
+            "- APIでは通常取れないため手入力が必要な指標: 保存数、保存率、プロフィールアクセス数、フォロー転換率、完視聴率、平均視聴時間、流入元、視聴者属性、冒頭3秒、動画構成、CTA、PR有無",
+            f"- レポート全体の信頼度: {scope['overall_confidence']}（{confidence_description(scope['overall_confidence'])}）",
+            "",
+        ]
+    )
 
 
-def _section_summary(summary: dict[str, Any]) -> list[str]:
-    return [
-        "## 3. 投稿実績サマリー",
-        f"- 投稿本数: {summary['post_count']}",
-        f"- データ評価: {summary['data_sufficiency']}",
-        f"- 平均再生数: {format_number(summary['average_views'])}",
-        f"- 中央値再生数: {format_number(summary['median_views'])}",
-        f"- 最大再生数: {format_number(summary['max_views'])}",
-        f"- 欠損データ: {summary['data_quality_note']}",
-        f"- 平均いいね率: {format_percent(summary['average_like_rate'])}",
-        f"- 平均コメント率: {format_percent(summary['average_comment_rate'])}",
-        f"- 平均保存率: {format_percent(summary['average_save_rate'])}",
-        f"- 平均シェア率: {format_percent(summary['average_share_rate'])}",
-        f"- 平均フォロー転換率: {format_percent(summary['average_follow_conversion_rate'])}",
-        f"- 完視聴率の傾向: 平均 {format_percent(summary['average_completion_rate'])}",
-        "",
-    ]
+def _section_1(lines: list[str], analysis: dict[str, Any]) -> None:
+    summary = analysis["summaries"]["all"]
+    missing = [row["metric"] for row in analysis["missing_data"] if row["status"] == "未入力"]
+    partial = [row["metric"] for row in analysis["missing_data"] if row["status"] in {"一部入力あり", "自動推定のみ"}]
+    not_yet_clear = missing[:8] or partial[:8]
+    lines.extend(
+        [
+            "## 1. 結論",
+            f"- 現在のアカウント状態: API上は{format_number(summary['post_count'])}本の投稿を分析対象にできます。中央値再生数は{format_number(summary['median_views'])}です。",
+            "- 今回の分析で確実に言えること: 再生数、いいね率、コメント率、シェア率、投稿頻度、投稿間隔、動画尺は公式API取得データだけで確認できます。",
+            f"- データ不足でまだ言えないこと: {safe_join(not_yet_clear)}。これらはAPIでは通常取れない、または全投稿で入力が揃っていないため、手入力後に判断してください。",
+            "- 最優先で改善すべきこと: 次の10投稿では、美容・コスメ本流の投稿だけを対象に、冒頭3秒、動画構成、CTA、PR有無をcreative_notes.csvへ記録してください。",
+            "- 次の10投稿で検証すべきこと: 買う前チェック、正直レビュー、比較、使い切りレビューを美容領域に限定して検証してください。",
+            "- 今後30日間の方針: 平均値ではなく中央値、直近10投稿中央値、外れ値除外値を見ながら、PR/非PRと美容本流/非美容を分けて評価します。",
+            "",
+        ]
+    )
 
 
-def _section_top_posts(performance: dict[str, Any]) -> list[str]:
-    traits = performance["top_common"]
-    lines = [
-        "## 4. 伸びた投稿の共通点",
-        f"- テーマ: {_format_terms(traits['genres'])}",
-        f"- 冒頭フック: {safe_join(traits['hooks'])}",
-        f"- 動画尺: {_format_terms(traits['duration_buckets'])}",
-        f"- 構成: {safe_join(traits['structures'])}",
-        f"- 音源: {_format_terms(traits['sounds'])}",
-        f"- ハッシュタグ: {_format_terms(traits['hashtags'])}",
-        "- コメント欄の反応: コメント数や投稿メモから見ると、悩みが明確な投稿ほど反応が出ている可能性があります。",
-        "- 伸びた理由の仮説:",
-    ]
-    lines.extend([f"  - {note}" for note in performance["quantitative_notes"]])
-    lines.extend([f"  - {note}" for note in performance["qualitative_notes"]])
-    lines.append("- 根拠となる投稿:")
-    lines.extend([f"  - {line}" for line in performance["top_evidence"]] or ["  - データ不足"])
+def _section_2(lines: list[str], analysis: dict[str, Any]) -> None:
+    account = analysis["account"]
+    habits = analysis["habits"]
+    lines.extend(
+        [
+            "## 2. アカウント概要",
+            f"- ジャンル: {account['genre']}",
+            f"- 想定ターゲット: {account['target_audience']}",
+            f"- 現在のフォロワー数: {format_number(account['current_followers'])}",
+            f"- 目標フォロワー数: {format_number(account['target_followers'])}",
+            f"- 投稿可能頻度: {account['postable_frequency']}",
+            f"- 現在の投稿頻度: {_format_frequency(habits['weekly_frequency'])}",
+            f"- 顔出し可否: {format_bool(account['face_reveal'])}",
+            f"- 声出し可否: {format_bool(account['voice_available'])}",
+            f"- 避けたい表現: {account['avoid_expressions']}",
+            "",
+        ]
+    )
+
+
+def _section_3(lines: list[str], analysis: dict[str, Any]) -> None:
+    summary = analysis["summaries"]["all"]
+    lines.extend(
+        [
+            "## 3. API取得指標サマリー",
+            _confidence_line(summary),
+            f"- 投稿本数: {format_number(summary['post_count'])}",
+            f"- 平均再生数: {format_number(summary['average_views'])}",
+            f"- 中央値再生数: {format_number(summary['median_views'])}",
+            f"- 最大再生数: {format_number(summary['max_views'])}",
+            f"- 最小再生数: {format_number(summary['min_views'])}",
+            f"- 上位10%除外平均: {format_number(summary['top_10_excluded_average'])}",
+            f"- 直近10投稿中央値: {format_number(summary['recent_10_median'])}",
+            f"- 直近30日投稿数: {format_number(summary['recent_30_count'])}",
+            f"- 直近30日中央値: {format_number(summary['recent_30_median'])}",
+            f"- 平均いいね率: {format_percent(summary['average_like_rate'])}",
+            f"- 平均コメント率: {format_percent(summary['average_comment_rate'])}",
+            f"- 平均シェア率: {format_percent(summary['average_share_rate'])}",
+            f"- 投稿曜日: {_format_pairs(summary['day_counts'])}",
+            f"- 投稿時間帯: {_format_pairs(summary['time_buckets'])}",
+            f"- 動画尺分類: {_format_pairs(summary['duration_buckets'])}",
+            "",
+        ]
+    )
+
+
+def _section_4(lines: list[str], analysis: dict[str, Any]) -> None:
+    lines.extend(["## 4. 手入力が必要な不足指標", "| 指標 | 状態 | 不足理由 | 入力先 | 分析できるようになること |", "|---|---|---|---|---|"])
+    for row in analysis["missing_data"]:
+        lines.append(f"| {row['metric']} | {row['status']} | {row['reason']} | {row['input']} | {row['benefit']} |")
     lines.append("")
-    return lines
 
 
-def _section_weak_posts(performance: dict[str, Any]) -> list[str]:
-    traits = performance["weak_common"]
-    return [
-        "## 5. 伸びなかった投稿の共通点",
-        f"- テーマ: {_format_terms(traits['genres'])}",
-        f"- 冒頭の弱さ: {safe_join(traits['hooks'])}",
-        "- ターゲットの曖昧さ: 投稿タイトルやメモに誰向けかが出ていない投稿は、見る理由が弱くなる可能性があります。",
-        f"- 動画尺: {_format_terms(traits['duration_buckets'])}",
-        f"- 構成: {safe_join(traits['structures'])}",
-        f"- 投稿タイミング: {_format_terms(traits['time_buckets'])}",
-        f"- 改善仮説: {safe_join(performance['qualitative_notes'])}",
-        f"- 根拠となる投稿: {safe_join(performance['weak_evidence'])}",
-        "",
-    ]
+def _section_5(lines: list[str], analysis: dict[str, Any]) -> None:
+    viral = analysis["viral"]
+    buzz_excluded = analysis["summaries"]["buzz_excluded"]
+    lines.extend(
+        [
+            "## 5. 外れ値・バズ投稿の扱い",
+            f"- 信頼度: {viral['confidence']}",
+            "- バズ投稿候補:",
+        ]
+    )
+    lines.extend(_post_lines(viral["viral_posts"], include_reason=True) or ["  - データ不足"])
+    lines.extend(
+        [
+            f"- バズ投稿を除いた実態値: 中央値 {format_number(buzz_excluded['median_views'])} / 上位10%除外平均 {format_number(buzz_excluded['top_10_excluded_average'])}",
+            "- 美容アカウントとして再現可能なバズ:",
+        ]
+    )
+    lines.extend(_post_lines(viral["reproducible"]) or ["  - 現時点では判断不可。beauty_core/beauty_adjacent、creative_notes、同型2本以上が揃っていません。"])
+    lines.append("- 再現可能性が低いバズ:")
+    lines.extend(_post_lines(viral["low_reproducibility"]) or ["  - データ不足"])
+    lines.append("- 今後の分析から分離すべき投稿: 非美容カテゴリ、creative_notes未入力の外れ値、単発で再現性が確認できない投稿")
+    lines.append("")
 
 
-def _section_habits(habits: dict[str, Any]) -> list[str]:
-    return [
-        "## 6. 投稿習慣の改善点",
-        f"- 投稿頻度: {format_frequency(habits['weekly_frequency'])}",
-        f"- 投稿曜日: {_format_terms(habits['day_counts'])}",
-        f"- 投稿時間: {_format_terms(habits['time_counts'])}",
-        f"- テーマの偏り: {_format_terms(habits['genre_counts'])}",
-        "- 検証不足: 投稿数が少ない場合や同じ型の再検証が少ない場合は、断定せず暫定仮説として扱ってください。",
-        f"- 次に変えるべき運用ルール: {safe_join(habits['notes'])}",
-        "",
-    ]
+def _section_6(lines: list[str], analysis: dict[str, Any]) -> None:
+    beauty = analysis["beauty_analysis"]
+    summary = beauty["core_summary"]
+    lines.extend(
+        [
+            "## 6. 美容・コスメ本流投稿の分析",
+            f"- 信頼度: {beauty['confidence']}（{confidence_description(beauty['confidence'])}）",
+            f"- beauty_core 投稿数: {format_number(beauty['core_count'])}",
+            f"- 中央値再生数: {format_number(summary['median_views'])}",
+            "- 上位投稿:",
+        ]
+    )
+    lines.extend(_post_lines(beauty["top_core"]) or ["  - データ不足"])
+    lines.append("- 下位投稿:")
+    lines.extend(_post_lines(beauty["weak_core"]) or ["  - データ不足"])
+    lines.extend(
+        [
+            "- 共通点: creative_notes.csvが入力されている投稿だけで冒頭・構成・CTAを比較します。未入力の場合は共通点を断定しません。",
+            f"- データ不足点: {beauty['missing']}",
+            "",
+        ]
+    )
 
 
-def _section_trends(trend_analysis: dict[str, Any]) -> list[str]:
-    lines = [
-        "## 7. トレンド分析",
-        "- 現在のTikTokで目立つトレンド:",
-    ]
-    if trend_analysis["used_trends"]:
-        for trend in trend_analysis["used_trends"]:
-            lines.append(f"  - {trend['name']}: {trend['growth_hypothesis']}")
-    else:
-        lines.append("  - データ不足")
-    lines.append("- 自分のアカウントに取り入れやすいトレンド:")
-    if trend_analysis["easy_to_apply"]:
-        for trend in trend_analysis["easy_to_apply"]:
-            lines.append(f"  - {trend['name']}: {trend['applicable_points']}")
-    else:
-        lines.append("  - データ不足")
+def _section_7(lines: list[str], analysis: dict[str, Any]) -> None:
+    pr = analysis["pr_analysis"]
+    lines.extend(
+        [
+            "## 7. PR投稿 / 非PR投稿の比較",
+            f"- 信頼度: {pr['confidence']}",
+            f"- PR投稿候補の判定: {_format_pairs(pr['status_counts'])}",
+            f"- PR投稿の中央値再生数: {format_number(pr['pr_summary']['median_views'])}",
+            f"- 非PR投稿の中央値再生数: {format_number(pr['non_pr_summary']['median_views'])}",
+            f"- PR投稿の平均いいね率: {format_percent(pr['pr_summary']['average_like_rate'])}",
+            f"- 非PR投稿の平均いいね率: {format_percent(pr['non_pr_summary']['average_like_rate'])}",
+            "- PR投稿で弱くなりやすい点: 商品訴求だけになると視聴者の不安解消や保存理由が弱くなる可能性があります。ただしcreative_notes未入力時は断定しません。",
+            "- PR投稿で改善すべき見せ方: 良い点だけでなく、向いている人・向かない人、注意点、比較対象を入れてください。",
+            "- 注意: 薬機法・景表法・PR表記不足に注意してください。法的判定はこのツールの範囲外です。",
+            "",
+        ]
+    )
+
+
+def _section_8(lines: list[str], analysis: dict[str, Any]) -> None:
+    habits = analysis["habits"]
+    lines.extend(
+        [
+            "## 8. 投稿習慣分析",
+            f"- 信頼度: {habits['confidence']}",
+            f"- 投稿頻度: {_format_frequency(habits['weekly_frequency'])}",
+            f"- 投稿間隔: 平均 {format_number(habits['average_post_interval_days'])} 日",
+            f"- 最大投稿間隔: {format_number(habits['max_post_interval_days'])} 日",
+            f"- 投稿曜日: {_format_pairs(habits['day_counts'])}",
+            f"- 投稿時間帯: {_format_pairs(habits['time_buckets'])}",
+            "- 継続性: 投稿間隔が長い場合、直近10投稿中央値の検証速度が落ちます。",
+            "- 次に変えるべき運用ルール: 次の30日は週3〜5本を目安に、同じ型を2本以上ずつ検証してください。",
+            "",
+        ]
+    )
+
+
+def _section_9(lines: list[str], analysis: dict[str, Any]) -> None:
+    hashtags = analysis["hashtags"]
+    groups = hashtags["groups"]
+    lines.extend(
+        [
+            "## 9. ハッシュタグ・キャプション分析",
+            f"- 信頼度: {hashtags['confidence']}",
+            f"- 出現1回のハッシュタグ: {_format_tag_items(groups['single'][:10])}。単発のため戦略判断には使いません。",
+            f"- 汎用タグ: {_format_tag_items(groups['generic'])}。戦略軸にはしません。",
+            f"- 検証候補タグ: {_format_tag_items(groups['test_candidates'])}",
+            f"- 傾向候補タグ: {_format_tag_items(groups['trend_candidates'])}",
+            f"- 有望タグ候補: {_format_tag_items(groups['promising_candidates'])}",
+            "- 戦略判断に使わないタグ: 出現1回のタグ、汎用タグ、動画内容と関係が薄いタグ",
+            f"- キャプション傾向: {safe_join(hashtags['caption_notes'])}",
+            "- 注意点: ハッシュタグは補助指標です。1回だけ出たタグを軸や勝ちパターンとして扱いません。",
+            "",
+        ]
+    )
+
+
+def _section_10(lines: list[str], analysis: dict[str, Any]) -> None:
+    creative = analysis["creative_analysis"]
+    lines.extend(["## 10. クリエイティブ分析", f"- 信頼度: {creative['confidence']}"])
+    if not creative["available"]:
+        lines.extend(
+            [
+                f"- 状態: {creative['message']}",
+                f"- 入力すべき項目: {safe_join(creative['required_fields'])}",
+                "- 伸びた投稿との関係: 現時点では判断不可。追加でcreative_notes.csvを入力してください。",
+                "",
+            ]
+        )
+        return
+    lines.extend(
+        [
+            f"- 冒頭3秒 / hook_type: {_format_pairs(creative['hook_types'])}",
+            f"- video_structure: {_format_pairs(creative['structures'])}",
+            f"- CTA: {_format_pairs(creative['cta_types'])}",
+            "- 顔出し: creative_notes.csvのface_visible入力後に比較",
+            "- 声出し: creative_notes.csvのvoiceover入力後に比較",
+            f"- テロップ密度: {_format_pairs(creative['text_density'])}",
+            "- Before/After: creative_notes.csvのbefore_after入力後に比較",
+            "- 保存理由: save_reason入力後に保存率と比較",
+            "- コメント誘導: comment_prompt入力後にコメント率と比較",
+            "- 伸びた投稿との関係: API指標とcreative_notesの両方がある投稿に限定して比較します。",
+            "",
+        ]
+    )
+
+
+def _section_11(lines: list[str], analysis: dict[str, Any]) -> None:
+    trend = analysis["trend_analysis"]
+    lines.extend(["## 11. トレンド分析", f"- 信頼度: {trend['confidence']}"])
+    if not trend["available"]:
+        lines.extend(
+            [
+                f"- 状態: {trend['message']}",
+                f"- Creative CenterやGoogle Trendsで手動調査すべき項目: {safe_join(trend['manual_research_items'])}",
+                "- 取り入れやすいトレンド: trend_research.csv入力後に判断",
+                "- 取り入れない方がよいトレンド: 美容・コスメ領域に変換できないもの",
+                "- 美容アカウントへの変換案: 入力後に生成",
+                "- 音源方針: 説明が聞き取りやすい音量を優先。流行音源は手動調査結果で確認",
+                "- ハッシュタグ方針: 美容カテゴリと投稿内容に一致するものだけ検証",
+                "- 注意点: トレンドは自動取得しません。",
+                "",
+            ]
+        )
+        return
+    lines.append("- 取り入れやすいトレンド:")
+    lines.extend([f"  - {item.trend_name}: {item.adaptation_idea}" for item in trend["usable"]] or ["  - データ不足"])
     lines.append("- 取り入れない方がよいトレンド:")
-    if trend_analysis["avoid_or_adapt"]:
-        for trend in trend_analysis["avoid_or_adapt"]:
-            lines.append(f"  - {trend['name']}: 音源やジャンルが一致しないため、構成だけ応用する方が安全です。")
-    else:
-        lines.append("  - 現時点では手動入力された全トレンドが既存ジャンルと一定程度重なっています。")
-    lines.append(f"- 具体的な応用案: {safe_join(trend_analysis['notes'])}")
-    lines.append("")
-    return lines
+    lines.extend([f"  - {item.trend_name}: {item.reason}" for item in trend["avoid"]] or ["  - データ不足"])
+    lines.extend(["- 注意点: トレンドのテーマをそのまま輸入せず、美容の買う前チェック・比較・レビューに変換します。", ""])
 
 
-def _section_competitors(competitor_analysis: dict[str, Any]) -> list[str]:
-    post_comparison = competitor_analysis.get("post_comparison", {})
-    lines = [
-        "## 8. 競合・参考アカウント分析",
-        "- 参考になるアカウント:",
-    ]
-    for item in competitor_analysis["takeaways"]:
-        lines.append(f"  - {item['account_name']}: {item['winning_video_features']} ({item['url']})")
-    if not competitor_analysis["takeaways"]:
-        lines.append("  - データ不足")
-    lines.append("- 真似すべき構成:")
-    lines.extend([f"  - {item['video_structure']}" for item in competitor_analysis["takeaways"]] or ["  - データ不足"])
-    lines.append("- 真似すべき冒頭フック:")
-    hooks = [hook for item in competitor_analysis["takeaways"] for hook in item["opening_hooks"]]
-    lines.append(f"  - {safe_join(hooks)}")
-    lines.append("- 真似すべき投稿頻度:")
-    lines.extend([f"  - {item['account_name']}: {item['posting_frequency']}" for item in competitor_analysis["takeaways"]] or ["  - データ不足"])
-    lines.append(f"- 差別化すべきポイント: {safe_join(competitor_analysis['avoid_points'])}")
-    lines.append("- 投稿単位の比較:")
-    lines.append(f"  - {post_comparison.get('summary', 'データ不足')}")
-    lines.append("- 参考投稿から取り入れるべき点:")
-    lines.extend([f"  - {item}" for item in post_comparison.get("adopt_points", ["データ不足"])])
-    lines.append("- 取り入れない方がよい点:")
-    lines.extend([f"  - {item}" for item in post_comparison.get("avoid_points", ["データ不足"])])
-    lines.append("- 自アカウントとして差別化すべき点:")
-    lines.extend([f"  - {item}" for item in post_comparison.get("differentiation_points", ["データ不足"])])
-    if post_comparison.get("accounts"):
-        lines.append("- 参考アカウント別の投稿データ概要:")
-        for account in post_comparison["accounts"]:
-            lines.append(
-                f"  - {account['account_name']}: 投稿{account['post_count']}本、平均再生数 {format_number(account['average_views'])}、主要ジャンル {_format_terms(account['top_genres'])}"
-            )
-    lines.append("- 根拠となる参考投稿:")
-    lines.extend([f"  - {item}" for item in post_comparison.get("top_reference_posts", ["データ不足"])])
-    lines.append("")
-    return lines
+def _section_12(lines: list[str], analysis: dict[str, Any]) -> None:
+    comp = analysis["competitor_analysis"]
+    lines.extend(["## 12. 参考アカウント分析", f"- 信頼度: {comp['confidence']}"])
+    if not comp["available"]:
+        lines.extend([f"- 状態: {comp['message']}", "- コピーしてはいけない点: テーマ、台本、固有表現、映像構成の丸写し", ""])
+        return
+    lines.extend(
+        [
+            "- 参考アカウントから抽出した型:",
+            f"  - 冒頭フック構造: {_format_pairs(comp['hook_types'])}",
+            f"  - 動画構成: {_format_pairs(comp['structures'])}",
+            f"  - CTAパターン: {_format_pairs(comp['cta_types'])}",
+            f"  - 尺: {_format_pairs(comp['durations'])}",
+            "- テロップ密度: 競合メモのtext_densityだけを参照",
+            "- 自アカウントへの変換案: 損失回避型、買う前チェック型、比較型を美容レビューへ変換",
+            f"- コピーしてはいけない点: {comp['copy_guardrail']}",
+            "",
+        ]
+    )
 
 
-def _section_profile(strategy: dict[str, Any], account: dict[str, Any]) -> list[str]:
-    return [
-        "## 9. プロフィール・導線改善",
-        f"- プロフィール文の改善: 「誰向け」「何が得られるか」「投稿頻度」を1文ずつ入れ、{account['genre']}の実用アカウントだと分かるようにしてください。",
-        "- アイコン・名前・固定投稿の改善: 名前にジャンルが伝わる語を入れ、固定投稿は上位ジャンル・自己紹介・保存価値の高い代表投稿に整理してください。",
-        f"- フォローする理由の明確化: {strategy['positioning']}",
-        "- 動画からプロフィールへの導線: 動画末尾で「同じ悩みの人向けに毎週投稿」と伝え、プロフィール確認の理由を作ってください。",
-        "- プロフィールからフォローへの導線: 固定投稿とプロフィール文で、フォロー後に得られる継続価値を明確にしてください。",
-        "",
-    ]
+def _section_13(lines: list[str], analysis: dict[str, Any]) -> None:
+    account = analysis["account"]
+    lines.extend(
+        [
+            "## 13. プロフィール・導線改善",
+            f"- 現在のプロフィール改善点: {account['genre']}で誰向けに何を投稿するかを先頭1文で明確にしてください。",
+            f"- 誰向けか: {account['target_audience']}",
+            "- 何が得られるか: 買う前に比較できる、正直な使用感が分かる、向き不向きが分かる",
+            f"- 投稿頻度: {account['postable_frequency']}をプロフィールや固定投稿の期待値と合わせる",
+            "- 固定投稿: 買う前チェック、自己紹介、保存価値の高い比較レビューの3本を候補にする",
+            "- フォローする理由: 美容・コスメ選びの失敗を減らせることを明確にする",
+            "- 動画末尾からプロフィールへの導線: 「他の比較レビューはプロフィールにまとめています」のように自然に誘導",
+            "",
+        ]
+    )
 
 
-def _section_video_ideas(video_ideas: list[dict[str, str]]) -> list[str]:
-    lines = ["## 10. 次に作るべき動画案"]
-    for idea in video_ideas:
+def _section_14(lines: list[str], analysis: dict[str, Any]) -> None:
+    lines.append("## 14. 次に作るべき動画案")
+    for idea in analysis["video_ideas"]:
         lines.extend(
             [
                 f"### 動画案{idea['number']}",
@@ -228,20 +342,22 @@ def _section_video_ideas(video_ideas: list[dict[str, str]]) -> list[str]:
                 f"- 冒頭3秒: {idea['hook']}",
                 f"- 動画構成: {idea['structure']}",
                 f"- 尺: {idea['duration']}",
-                f"- 使用できそうな音源: {idea['sound']}",
+                f"- 使用できそうな音源または音源方針: {idea['sound']}",
                 f"- テロップ案: {idea['caption']}",
                 f"- CTA: {idea['cta']}",
                 f"- 検証したい仮説: {idea['hypothesis']}",
                 f"- 成功判定KPI: {idea['success_kpi']}",
+                f"- 元にした根拠データ: {idea['evidence']}",
+                f"- 信頼度: {idea['confidence']}",
+                f"- 注意点: {idea['note']}",
                 "",
             ]
         )
-    return lines
 
 
-def _section_operation_plan(operation_plan: list[dict[str, str]]) -> list[str]:
-    lines = ["## 11. 30日間の運用プラン"]
-    for week in operation_plan:
+def _section_15(lines: list[str], analysis: dict[str, Any]) -> None:
+    lines.append("## 15. 30日間の運用プラン")
+    for week in analysis["operation_plan"]:
         lines.extend(
             [
                 f"- {week['week']}:",
@@ -250,81 +366,77 @@ def _section_operation_plan(operation_plan: list[dict[str, str]]) -> list[str]:
                 f"  - 投稿ジャンル: {week['genres']}",
                 f"  - 改善ポイント: {week['improvement']}",
                 f"  - 確認するKPI: {week['kpi']}",
+                f"  - 必要な手入力データ: {week['manual_data']}",
             ]
         )
     lines.append("")
-    return lines
 
 
-def _section_kpi_design(kpi_design: dict[str, list[str]]) -> list[str]:
-    return [
-        "## 12. KPI設計",
-        f"- 最重要KPI: {safe_join(kpi_design['primary'])}",
-        f"- 補助KPI: {safe_join(kpi_design['secondary'])}",
-        f"- 投稿ごとに見る指標: {safe_join(kpi_design['per_post'])}",
-        f"- 週次で見る指標: {safe_join(kpi_design['weekly'])}",
-        f"- 月次で見る指標: {safe_join(kpi_design['monthly'])}",
-        f"- 判断基準: {safe_join(kpi_design['decision_rules'])}",
-        "",
-    ]
+def _section_16(lines: list[str], analysis: dict[str, Any]) -> None:
+    kpi = analysis["kpi_design"]
+    lines.extend(
+        [
+            "## 16. KPI設計",
+            f"- APIだけで見られるKPI: {safe_join(kpi['api_only'])}",
+            f"- 手入力後に見られるKPI: {safe_join(kpi['manual_required'])}",
+            "",
+        ]
+    )
 
 
-def _section_hypotheses(hypotheses: list[dict[str, str]]) -> list[str]:
-    lines = [
-        "## 13. 仮説検証リスト",
-        "| 優先度 | 仮説 | 検証方法 | 必要投稿数 | 成功条件 | 次のアクション |",
-        "|---|---|---|---|---|---|",
-    ]
-    for item in hypotheses:
+def _section_17(lines: list[str], analysis: dict[str, Any]) -> None:
+    lines.extend(
+        [
+            "## 17. 仮説検証リスト",
+            "| 優先度 | 仮説 | 必要データ | 検証方法 | 必要投稿数 | 成功条件 | 信頼度 | 次のアクション |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+    )
+    for row in analysis["hypotheses"]:
         lines.append(
-            f"| {item['priority']} | {item['hypothesis']} | {item['method']} | {item['posts_needed']} | {item['success']} | {item['next_action']} |"
+            f"| {row['priority']} | {row['hypothesis']} | {row['data']} | {row['method']} | {row['posts']} | {row['success']} | {row['confidence']} | {row['action']} |"
         )
     lines.append("")
-    return lines
 
 
-def _section_backlog(backlog: dict[str, list[str]]) -> list[str]:
-    lines = ["## 14. 改善バックログ"]
-    for title, items in backlog.items():
+def _section_18(lines: list[str], analysis: dict[str, Any]) -> None:
+    lines.append("## 18. 改善バックログ")
+    for title, items in analysis["backlog"].items():
         lines.append(f"### {title}")
         lines.extend([f"- {item}" for item in items])
-        lines.append("")
-    return lines
+    lines.append("")
 
 
-def _section_llm_analysis(llm_analysis: dict[str, Any] | None) -> list[str]:
-    if not llm_analysis:
-        llm_analysis = {
-            "status": "未実行",
-            "provider": "none",
-            "model": None,
-            "text": "外部LLM分析は未実行です。CLIから --llm-provider と --llm-model を指定すると追加できます。",
-        }
-    lines = [
-        "## 15. 外部LLM定性分析（任意）",
-        f"- 状態: {llm_analysis.get('status', '未実行')}",
-        f"- Provider: {llm_analysis.get('provider', 'none')}",
-        f"- Model: {llm_analysis.get('model') or '未指定'}",
-        "",
-        str(llm_analysis.get("text") or "データ不足"),
-        "",
-    ]
-    return lines
+def _confidence_line(summary: dict[str, Any]) -> str:
+    level = summary.get("confidence", "信頼度D")
+    return f"- 信頼度: {level}（{confidence_description(level)}）"
 
 
-def _format_terms(items: list[tuple[str, int]] | list[str]) -> str:
-    if not items:
-        return DATA_INSUFFICIENT
-    formatted = []
-    for item in items:
-        if isinstance(item, tuple):
-            formatted.append(f"{item[0]}({item[1]})")
-        else:
-            formatted.append(str(item))
-    return "、".join(formatted)
-
-
-def format_frequency(value: float | None) -> str:
+def _format_frequency(value: float | None) -> str:
     if value is None:
         return DATA_INSUFFICIENT
     return f"週約{value:.1f}本"
+
+
+def _format_pairs(items: list[tuple[Any, Any]] | None) -> str:
+    if not items:
+        return DATA_INSUFFICIENT
+    return "、".join(f"{key}({value})" for key, value in items)
+
+
+def _format_tag_items(items: list[dict[str, Any]] | None) -> str:
+    if not items:
+        return DATA_INSUFFICIENT
+    return "、".join(f"{item['tag']}({item['count']})" for item in items)
+
+
+def _post_lines(rows: list[dict[str, Any]], include_reason: bool = False) -> list[str]:
+    lines = []
+    for row in rows[:8]:
+        reason = ""
+        if include_reason and row.get("viral_reasons"):
+            reason = f" / 理由: {safe_join(row['viral_reasons'])}"
+        lines.append(
+            f"  - {row.get('video_id') or DATA_INSUFFICIENT}: {format_number(row.get('view_count'))}再生 / {row.get('strategy_category') or DATA_INSUFFICIENT} / PR判定 {row.get('pr_status') or DATA_INSUFFICIENT}{reason}"
+        )
+    return lines

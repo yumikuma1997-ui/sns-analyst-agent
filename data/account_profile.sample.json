@@ -1,20 +1,16 @@
 {
-  "account_name": "暮らしメモ研究所",
-  "genre": "一人暮らし向けの暮らし改善・節約",
-  "target_audience": "20代後半から30代前半の一人暮らし会社員。家事や節約をラクにしたいが、細かい作業は苦手な人。",
-  "operation_goal": "趣味投稿から、保存される暮らしノウハウアカウントへ育てる",
-  "current_followers": 1280,
+  "account_name": "7makeup7",
+  "genre": "美容・コスメレビュー",
+  "target_audience": "美容、コスメ、スキンケア、メイクの購入前レビューを探しているTikTokユーザー",
+  "operation_goal": "公式APIで取得できる公開動画指標と手入力メモを分け、次の投稿改善に使える分析レポートを作る",
+  "current_followers": 2972,
   "target_followers": 5000,
-  "target_state": "プロフィールを見た人が、暮らし改善の実用ネタを継続的に見たいと思ってフォローする状態",
-  "postable_frequency": "週4本",
-  "face_reveal": false,
+  "target_state": "買う前に参考になる正直レビューが見られる美容・コスメアカウント",
+  "postable_frequency": "週3〜5本",
+  "face_reveal": true,
   "voice_available": true,
-  "shooting_environment": "自宅キッチン、デスク、玄関、近所のスーパー",
-  "available_assets": "スマホ撮影、画面録画、Canvaで作った簡単なテロップ画像",
-  "avoid_expressions": "過度な煽り、節約できない人を責める表現、根拠のない断定",
-  "reference_accounts": [
-    "@kurashi_tips_a",
-    "@simple_life_b",
-    "@setsuyaku_note_c"
-  ]
+  "shooting_environment": "自宅、自然光、スマホ撮影、商品物撮り、メイク実演",
+  "available_assets": "過去の公開動画、商品レビュー素材、TikTok公式APIで取得した公開動画指標、手入力メモ",
+  "avoid_expressions": "効果効能の断定、根拠のない美容効果の保証、PR表記不足、他人の投稿の無断転載",
+  "reference_accounts": []
 }

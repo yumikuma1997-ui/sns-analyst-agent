@@ -1,637 +1,535 @@
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import asdict
+from datetime import datetime, timezone
 from typing import Any
 
-from metrics import calculate_all_post_metrics, summarize_posts
-from models import AccountProfile, Post, PostMetric
-from utils import (
-    DATA_INSUFFICIENT,
-    duration_bucket,
-    format_number,
-    mean,
-    parse_date,
-    safe_join,
-    time_bucket,
-    top_items,
-    top_terms,
+from classifiers import (
+    classify_duration_bucket,
+    classify_post_time_bucket,
+    classify_strategy_category,
+    detect_outlier_viral_posts,
+    detect_pr_status,
+    hashtag_groups,
 )
+from confidence import calculate_confidence_level, manual_metric_confidence
+from metrics import calculate_api_metrics, safe_divide, summarize_api_posts
+from models import AccountProfile, ApiPost, CompetitorPost, CreativeNote, ManualInsight, TrendResearch
+from utils import DATA_INSUFFICIENT, format_number, format_percent, median, parse_datetime
+
+
+MANUAL_REQUIRED_METRICS = [
+    ("保存数", "manual_insights.csv", "保存率、保存される理由の検証"),
+    ("保存率", "manual_insights.csv", "保存価値の強い投稿型の比較"),
+    ("プロフィールアクセス数", "manual_insights.csv", "プロフィール導線の評価"),
+    ("投稿単位のフォロー増加数", "manual_insights.csv", "フォロー転換に効いた投稿の特定"),
+    ("フォロー転換率", "manual_insights.csv", "再生からフォローへの効率比較"),
+    ("完視聴率", "manual_insights.csv", "尺と構成の維持率比較"),
+    ("平均視聴時間", "manual_insights.csv", "冒頭と構成の離脱検証"),
+    ("視聴維持率", "manual_insights.csv", "動画尺に対する視聴の深さ"),
+    ("流入元", "manual_insights.csv", "おすすめ、検索、プロフィールなど流入別評価"),
+    ("視聴者属性", "manual_insights.csv", "想定ターゲットとの一致確認"),
+    ("冒頭3秒", "creative_notes.csv", "フック構造と成果の関係"),
+    ("動画構成", "creative_notes.csv", "構成パターンの再現性確認"),
+    ("CTA", "creative_notes.csv", "コメント・保存・フォロー誘導の検証"),
+    ("顔出し有無", "creative_notes.csv", "顔出しと反応の関係"),
+    ("声出し有無", "creative_notes.csv", "声出しと維持率の関係"),
+    ("PR有無", "creative_notes.csv", "PR/非PRの正確な比較"),
+]
 
 
 def analyze(
     account: AccountProfile,
-    posts: list[Post],
-    trends: list[dict[str, Any]],
-    competitors: list[dict[str, Any]],
-    competitor_posts: list[Post] | None = None,
+    api_posts: list[ApiPost],
+    manual_insights: list[ManualInsight] | None = None,
+    creative_notes: list[CreativeNote] | None = None,
+    trend_research: list[TrendResearch] | None = None,
+    competitor_posts: list[CompetitorPost] | None = None,
 ) -> dict[str, Any]:
+    manual_insights = manual_insights or []
+    creative_notes = creative_notes or []
+    trend_research = trend_research or []
     competitor_posts = competitor_posts or []
-    metrics = calculate_all_post_metrics(posts)
-    summary = summarize_posts(metrics)
-    ranked = _rank_posts(metrics)
-    habits = _analyze_habits(posts)
-    performance = _analyze_performance(metrics, ranked["top"], ranked["weak"])
-    trend_analysis = _analyze_trends(posts, trends)
-    competitor_post_analysis = _analyze_reference_posts(posts, competitor_posts)
-    competitor_analysis = _analyze_competitors(competitors, competitor_post_analysis)
-    strategy = _build_strategy(account, summary, performance, habits, trend_analysis)
+
+    manual_by_id = {item.video_id: item for item in manual_insights if item.video_id}
+    creative_by_id = {item.video_id: item for item in creative_notes if item.video_id}
+    rows = [_build_row(post, manual_by_id.get(post.video_id), creative_by_id.get(post.video_id)) for post in api_posts]
+
+    overall_summary = _scope_summary(rows)
+    viral_posts = detect_outlier_viral_posts(rows, overall_summary["median_views"])
+    viral_ids = {row["video_id"] for row in viral_posts}
+    buzz_excluded = _scope_summary([row for row in rows if row["video_id"] not in viral_ids])
+    creative_coverage = _coverage(len(rows), len(creative_by_id))
+    manual_coverage = _coverage(len(rows), len(manual_by_id))
 
     return {
         "account": asdict(account),
-        "posts": posts,
-        "metrics": metrics,
-        "summary": summary,
-        "ranked": ranked,
-        "performance": performance,
-        "habits": habits,
-        "trend_analysis": trend_analysis,
-        "competitor_analysis": competitor_analysis,
-        "competitor_post_analysis": competitor_post_analysis,
-        "strategy": strategy,
-        "video_ideas": _generate_video_ideas(account, performance, trend_analysis, competitors),
-        "operation_plan": _generate_operation_plan(account, performance, trend_analysis),
-        "kpi_design": _generate_kpi_design(summary),
-        "hypotheses": _generate_hypotheses(performance, habits, trend_analysis),
+        "data_scope": {
+            "api_post_count": len(api_posts),
+            "manual_insight_count": len(manual_insights),
+            "creative_note_count": len(creative_notes),
+            "trend_research_count": len(trend_research),
+            "competitor_post_count": len(competitor_posts),
+            "api_fields": [
+                "id",
+                "create_time",
+                "share_url",
+                "video_description",
+                "title",
+                "duration",
+                "like_count",
+                "comment_count",
+                "share_count",
+                "view_count",
+                "cover_image_url",
+                "embed_link",
+            ],
+            "not_available_via_basic_api": [item[0] for item in MANUAL_REQUIRED_METRICS],
+            "overall_confidence": calculate_confidence_level(len(rows), True, creative_coverage, manual_coverage),
+        },
+        "rows": rows,
+        "summaries": {
+            "all": overall_summary,
+            "beauty_core": _scope_summary([row for row in rows if row["strategy_category"] == "beauty_core"]),
+            "beauty_with_adjacent": _scope_summary(
+                [row for row in rows if row["strategy_category"] in {"beauty_core", "beauty_adjacent"}]
+            ),
+            "pr": _scope_summary([row for row in rows if row["pr_status"] in {"明示PR", "PR疑い"}]),
+            "non_pr": _scope_summary([row for row in rows if row["pr_status"] == "非PR"]),
+            "unrelated": _scope_summary([row for row in rows if row["strategy_category"] == "unrelated"]),
+            "buzz_excluded": buzz_excluded,
+        },
+        "missing_data": _missing_data_table(manual_insights, creative_notes, rows),
+        "viral": _analyze_viral(rows, viral_posts),
+        "beauty_analysis": _analyze_beauty(rows),
+        "pr_analysis": _analyze_pr(rows),
+        "habits": _analyze_habits(rows),
+        "hashtags": _analyze_hashtags(rows, overall_summary["median_views"]),
+        "creative_analysis": _analyze_creative(rows, creative_by_id),
+        "trend_analysis": _analyze_trends(trend_research),
+        "competitor_analysis": _analyze_competitors(competitor_posts),
+        "video_ideas": _generate_video_ideas(rows, trend_research, competitor_posts),
+        "operation_plan": _generate_operation_plan(),
+        "kpi_design": _generate_kpi_design(),
+        "hypotheses": _generate_hypotheses(),
         "backlog": _generate_backlog(),
     }
 
 
-def _rank_posts(metrics: list[PostMetric]) -> dict[str, list[PostMetric]]:
-    valid = [metric for metric in metrics if metric.post.views is not None]
-    ordered = sorted(valid, key=lambda item: item.post.views or 0, reverse=True)
-    if not ordered:
-        return {"top": [], "weak": []}
-    size = max(1, min(3, round(len(ordered) * 0.25)))
-    return {"top": ordered[:size], "weak": list(reversed(ordered[-size:]))}
-
-
-def _analyze_performance(
-    metrics: list[PostMetric],
-    top_metrics: list[PostMetric],
-    weak_metrics: list[PostMetric],
-) -> dict[str, Any]:
-    top_posts = [metric.post for metric in top_metrics]
-    weak_posts = [metric.post for metric in weak_metrics]
-    best_by = {
-        "views": _best_metric(metrics, lambda metric: metric.post.views),
-        "like_rate": _best_metric(metrics, lambda metric: metric.like_rate),
-        "comment_rate": _best_metric(metrics, lambda metric: metric.comment_rate),
-        "save_rate": _best_metric(metrics, lambda metric: metric.save_rate),
-        "share_rate": _best_metric(metrics, lambda metric: metric.share_rate),
-        "follow_conversion_rate": _best_metric(metrics, lambda metric: metric.follow_conversion_rate),
-        "completion_rate": _best_metric(metrics, lambda metric: metric.post.completion_rate),
-        "avg_retention_rate": _best_metric(metrics, lambda metric: metric.avg_retention_rate),
-    }
-
+def _build_row(post: ApiPost, manual: ManualInsight | None, creative: CreativeNote | None) -> dict[str, Any]:
+    metrics = calculate_api_metrics(post)
+    posted_dt = parse_datetime(post.posted_at or post.create_time)
+    strategy_category = classify_strategy_category(post, creative)
+    pr_status = detect_pr_status(post, creative)
     return {
-        "best_by": best_by,
-        "top_common": _common_traits(top_posts),
-        "weak_common": _common_traits(weak_posts),
-        "top_evidence": _evidence_lines(top_metrics),
-        "weak_evidence": _evidence_lines(weak_metrics),
-        "quantitative_notes": _quantitative_notes(metrics, top_metrics, weak_metrics),
-        "qualitative_notes": _qualitative_notes(top_posts, weak_posts),
+        "video_id": post.video_id,
+        "posted_at": post.posted_at,
+        "posted_dt": posted_dt,
+        "day_of_week": posted_dt.strftime("%a") if posted_dt else DATA_INSUFFICIENT,
+        "time_bucket": classify_post_time_bucket(post.posted_at),
+        "title": post.title,
+        "video_description": post.video_description,
+        "share_url": post.share_url,
+        "duration": post.duration,
+        "duration_bucket": classify_duration_bucket(post.duration),
+        "view_count": metrics["view_count"],
+        "like_count": metrics["like_count"],
+        "comment_count": metrics["comment_count"],
+        "share_count": metrics["share_count"],
+        "like_rate": metrics["like_rate"],
+        "comment_rate": metrics["comment_rate"],
+        "share_rate": metrics["share_rate"],
+        "hashtags": post.hashtags,
+        "cover_image_url": post.cover_image_url,
+        "embed_link": post.embed_link,
+        "source": post.source,
+        "manual": manual,
+        "creative": creative,
+        "strategy_category": strategy_category,
+        "strategy_category_source": "manual" if creative and creative.account_strategy_category else "auto_caption",
+        "pr_status": pr_status,
+        "save_rate": safe_divide(manual.saves, post.view_count) if manual else None,
+        "profile_visit_rate": safe_divide(manual.profile_views, post.view_count) if manual else None,
+        "follow_conversion_rate": safe_divide(manual.follows_from_video, post.view_count) if manual else None,
+        "avg_retention_rate": safe_divide(manual.average_watch_time, post.duration) if manual else None,
+        "completion_rate": manual.completion_rate if manual else None,
+        "hook_text": creative.hook_text if creative else "",
+        "hook_type": creative.hook_type if creative else "",
+        "video_structure": creative.video_structure if creative else "",
+        "cta_type": creative.cta_type if creative else "",
+        "text_density": creative.text_density if creative else "",
+        "content_category": creative.content_category if creative else "",
     }
 
 
-def _best_metric(metrics: list[PostMetric], getter) -> PostMetric | None:
-    candidates = [(getter(metric), metric) for metric in metrics if getter(metric) is not None]
-    if not candidates:
-        return None
-    return max(candidates, key=lambda item: item[0])[1]
-
-
-def _common_traits(posts: list[Post]) -> dict[str, Any]:
-    return {
-        "genres": top_terms(post.genre for post in posts),
-        "sounds": top_terms(post.sound for post in posts),
-        "hashtags": top_terms(tag for post in posts for tag in post.hashtags),
-        "duration_buckets": top_terms(duration_bucket(post.duration_sec) for post in posts),
-        "time_buckets": top_terms(time_bucket(post.time) for post in posts),
-        "cta_ratio": mean(1 if post.has_cta else 0 for post in posts if post.has_cta is not None),
-        "hooks": [post.hook for post in posts if post.hook][:5],
-        "structures": [post.structure for post in posts if post.structure][:5],
-        "titles": [post.title for post in posts if post.title][:5],
-        "notes": [post.notes for post in posts if post.notes][:5],
-    }
-
-
-def _evidence_lines(metrics: list[PostMetric]) -> list[str]:
-    lines = []
-    for metric in metrics:
-        post = metric.post
-        views = post.views if post.views is not None else DATA_INSUFFICIENT
-        lines.append(f"{post.title}: 再生数 {views}、ジャンル {post.genre or DATA_INSUFFICIENT}、冒頭「{post.hook or DATA_INSUFFICIENT}」")
-    return lines
-
-
-def _quantitative_notes(
-    metrics: list[PostMetric],
-    top_metrics: list[PostMetric],
-    weak_metrics: list[PostMetric],
-) -> list[str]:
-    notes = []
-    if not metrics:
-        return ["投稿データがないため、数値分析はデータ不足です。"]
-    if len(metrics) < 10:
-        notes.append("投稿数が10本未満の場合、傾向は暫定仮説として扱う必要があります。")
-    top_views = mean(metric.post.views for metric in top_metrics)
-    weak_views = mean(metric.post.views for metric in weak_metrics)
-    if top_views is not None and weak_views is not None and weak_views > 0:
-        notes.append(f"上位投稿の平均再生数は下位投稿の約{top_views / weak_views:.1f}倍です。")
-    save_rate = mean(metric.save_rate for metric in top_metrics)
-    weak_save_rate = mean(metric.save_rate for metric in weak_metrics)
-    if save_rate is not None and weak_save_rate is not None:
-        if save_rate > weak_save_rate:
-            notes.append("伸びた投稿は保存率も高く、実用性や後で見返す理由が再生拡大に寄与した可能性があります。")
-        else:
-            notes.append("再生数上位と保存率上位が一致していないため、話題性と保存価値を分けて検証してください。")
-    return notes or ["率計算に必要な再生数または反応数が不足しています。"]
-
-
-def _qualitative_notes(top_posts: list[Post], weak_posts: list[Post]) -> list[str]:
-    notes = []
-    if any("NG" in post.structure or "NG" in post.title for post in top_posts):
-        notes.append("伸びた投稿にはNG提示や損失回避の構成が含まれており、冒頭で見る理由を作れている可能性があります。")
-    if any(post.has_cta for post in top_posts):
-        notes.append("上位投稿はCTAや保存促しが入りやすく、視聴後の行動を設計できている可能性があります。")
-    if any(not post.has_cta for post in weak_posts if post.has_cta is not None):
-        notes.append("伸びなかった投稿にはCTAなしのものがあり、保存・コメント・フォローへの導線が弱い可能性があります。")
-    if any("Vlog" in post.title or "ルーティン" in post.genre for post in weak_posts):
-        notes.append("Vlogやルーティン寄りの投稿は、誰のどんな悩みを解決するかが曖昧になると伸びにくい可能性があります。")
-    return notes or ["定性情報が不足しているため、冒頭、構成、CTA、投稿メモを追加すると改善仮説を作りやすくなります。"]
-
-
-def _analyze_habits(posts: list[Post]) -> dict[str, Any]:
-    dates = [parse_date(post.date) for post in posts]
-    valid_dates = sorted(date for date in dates if date is not None)
-    span_days = None
-    weekly_frequency = None
-    max_gap_days = None
-    if valid_dates:
-        span_days = max(1, (valid_dates[-1] - valid_dates[0]).days + 1)
-        weekly_frequency = len(valid_dates) / span_days * 7
-        gaps = [(valid_dates[index] - valid_dates[index - 1]).days for index in range(1, len(valid_dates))]
-        max_gap_days = max(gaps, default=0)
-    genres = Counter(post.genre for post in posts if post.genre)
-    day_counts = Counter(post.day_of_week for post in posts if post.day_of_week)
-    time_counts = Counter(time_bucket(post.time) for post in posts if post.time)
-    cta_ratio = mean(1 if post.has_cta else 0 for post in posts if post.has_cta is not None)
-    notes = []
-    if weekly_frequency is None:
-        notes.append("投稿日が不足しているため、投稿頻度はデータ不足です。")
-    elif weekly_frequency < 3:
-        notes.append("週3本未満のペースです。次の30日間は検証回数を増やすため、週3-5本を目安にしてください。")
-    else:
-        notes.append(f"投稿頻度は週約{weekly_frequency:.1f}本です。検証に必要な最低限の試行回数は確保できています。")
-    if max_gap_days is not None and max_gap_days >= 5:
-        notes.append(f"最大投稿間隔が{max_gap_days}日あります。継続性の検証では投稿間隔を詰める余地があります。")
-    if genres and genres.most_common(1)[0][1] / len(posts) > 0.55:
-        notes.append(f"投稿ジャンルは「{genres.most_common(1)[0][0]}」に偏っています。勝ち筋なら強化しつつ、隣接テーマも検証してください。")
-    if cta_ratio is not None and cta_ratio < 0.7:
-        notes.append("CTAありの投稿比率が低めです。保存・コメント・フォローのどれを狙う投稿かを明確にしてください。")
-    return {
-        "span_days": span_days,
-        "weekly_frequency": weekly_frequency,
-        "max_gap_days": max_gap_days,
-        "genre_counts": genres.most_common(),
-        "day_counts": day_counts.most_common(),
-        "time_counts": time_counts.most_common(),
-        "cta_ratio": cta_ratio,
-        "notes": notes,
-    }
-
-
-def _analyze_trends(posts: list[Post], trends: list[dict[str, Any]]) -> dict[str, Any]:
-    post_sounds = {post.sound for post in posts if post.sound}
-    post_genres = {post.genre for post in posts if post.genre}
-    used_trends = []
-    easy_to_apply = []
-    avoid_or_adapt = []
-    for trend in trends:
-        trend_sounds = set(_list_value(trend.get("trending_sounds")))
-        trend_genres = set(_list_value(trend.get("genres")))
-        matched_sounds = sorted(post_sounds & trend_sounds)
-        matched_genres = sorted(post_genres & trend_genres)
-        item = {
-            "name": trend.get("name", DATA_INSUFFICIENT),
-            "matched_sounds": matched_sounds,
-            "matched_genres": matched_genres,
-            "applicable_points": trend.get("applicable_points", DATA_INSUFFICIENT),
-            "growth_hypothesis": trend.get("growth_hypothesis", DATA_INSUFFICIENT),
-            "opening_hooks": _list_value(trend.get("opening_hooks")),
-            "video_structures": _list_value(trend.get("video_structures")),
-            "editing_tempo": trend.get("editing_tempo", DATA_INSUFFICIENT),
-        }
-        if matched_sounds or matched_genres:
-            used_trends.append(item)
-            easy_to_apply.append(item)
-        else:
-            avoid_or_adapt.append(item)
-    notes = []
-    if not trends:
-        notes.append("trends.json が空のため、現在トレンドとの比較はデータ不足です。")
-    elif easy_to_apply:
-        notes.append("既存投稿ジャンルと重なるトレンドがあります。完全に別ジャンルへ寄せるより、既存の勝ち筋に構成だけ取り入れる方が検証しやすいです。")
-    if avoid_or_adapt:
-        notes.append("ジャンルや音源が一致しないトレンドは、無理に寄せるとアカウントの一貫性が弱まる可能性があります。構成や冒頭だけ抽出して使ってください。")
-    return {
-        "used_trends": used_trends,
-        "easy_to_apply": easy_to_apply,
-        "avoid_or_adapt": avoid_or_adapt,
-        "notes": notes,
-    }
-
-
-def _analyze_competitors(
-    competitors: list[dict[str, Any]],
-    competitor_post_analysis: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    takeaways = []
-    avoid_points = []
-    for competitor in competitors:
-        name = competitor.get("account_name", DATA_INSUFFICIENT)
-        takeaways.append(
-            {
-                "account_name": name,
-                "url": competitor.get("url", ""),
-                "posting_frequency": competitor.get("posting_frequency", DATA_INSUFFICIENT),
-                "winning_video_features": competitor.get("winning_video_features", DATA_INSUFFICIENT),
-                "opening_hooks": _list_value(competitor.get("opening_hooks")),
-                "video_structure": competitor.get("video_structure", DATA_INSUFFICIENT),
-                "applicable_points": competitor.get("applicable_points", DATA_INSUFFICIENT),
-            }
-        )
-        avoid = competitor.get("avoid_points")
-        if avoid:
-            avoid_points.append(f"{name}: {avoid}")
-    return {
-        "takeaways": takeaways,
-        "avoid_points": avoid_points or ["参考アカウントの避けるべき点が未入力です。次回から記録してください。"],
-        "post_comparison": competitor_post_analysis or {},
-    }
-
-
-def _analyze_reference_posts(self_posts: list[Post], reference_posts: list[Post]) -> dict[str, Any]:
-    if not reference_posts:
-        return {
-            "has_data": False,
-            "summary": "参考アカウント投稿CSVが未入力のため、投稿単位の比較はデータ不足です。",
-            "accounts": [],
-            "top_reference_posts": [],
-            "adopt_points": ["参考アカウントの投稿単位データを入力すると、取り入れるべき構成・冒頭・CTAを比較できます。"],
-            "avoid_points": ["数値だけで模倣対象を決めず、自アカウントのジャンル・ターゲットと合うものだけ検証してください。"],
-            "differentiation_points": ["自アカウントの投稿実績を基準に、参考アカウントの強い型を部分的に取り入れてください。"],
-        }
-
-    reference_metrics = calculate_all_post_metrics(reference_posts)
-    ranked_reference = sorted(
-        [metric for metric in reference_metrics if metric.post.views is not None],
-        key=lambda metric: metric.post.views or 0,
-        reverse=True,
+def _scope_summary(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    summary = summarize_api_posts(rows)
+    summary["duration_buckets"] = Counter(row["duration_bucket"] for row in rows).most_common()
+    summary["day_counts"] = Counter(row["day_of_week"] for row in rows if row["day_of_week"]).most_common()
+    summary["time_buckets"] = Counter(row["time_bucket"] for row in rows if row["time_bucket"]).most_common()
+    summary["confidence"] = calculate_confidence_level(
+        len(rows),
+        has_api_metrics=any(row.get("view_count") is not None for row in rows),
+        qualitative_coverage=_coverage(len(rows), sum(1 for row in rows if row.get("creative"))),
+        manual_coverage=_coverage(len(rows), sum(1 for row in rows if row.get("manual"))),
     )
-    top_reference_metrics = ranked_reference[:5]
-    top_reference_posts = [metric.post for metric in top_reference_metrics]
-    self_top_posts = [metric.post for metric in _rank_posts(calculate_all_post_metrics(self_posts))["top"]]
-    reference_traits = _common_traits(top_reference_posts)
-    self_traits = _common_traits(self_top_posts)
-    account_summaries = _reference_account_summaries(reference_posts)
-    adopt_points = _reference_adopt_points(reference_traits, self_traits, top_reference_posts)
-    avoid_points = _reference_avoid_points(reference_traits, self_traits)
-    differentiation_points = _reference_differentiation_points(reference_traits, self_traits)
+    return summary
 
-    return {
-        "has_data": True,
-        "summary": f"参考アカウント投稿 {len(reference_posts)}本を読み込み、上位{len(top_reference_posts)}本を比較しました。",
-        "accounts": account_summaries,
-        "top_reference_posts": _reference_evidence_lines(top_reference_metrics),
-        "reference_traits": reference_traits,
-        "self_traits": self_traits,
-        "adopt_points": adopt_points,
-        "avoid_points": avoid_points,
-        "differentiation_points": differentiation_points,
+
+def _missing_data_table(
+    manual_insights: list[ManualInsight],
+    creative_notes: list[CreativeNote],
+    rows: list[dict[str, Any]],
+) -> list[dict[str, str]]:
+    manual_values = {
+        "保存数": any(item.saves is not None for item in manual_insights),
+        "保存率": any(item.saves is not None for item in manual_insights),
+        "プロフィールアクセス数": any(item.profile_views is not None for item in manual_insights),
+        "投稿単位のフォロー増加数": any(item.follows_from_video is not None for item in manual_insights),
+        "フォロー転換率": any(item.follows_from_video is not None for item in manual_insights),
+        "完視聴率": any(item.completion_rate is not None for item in manual_insights),
+        "平均視聴時間": any(item.average_watch_time is not None for item in manual_insights),
+        "視聴維持率": any(item.average_watch_time is not None for item in manual_insights),
+        "流入元": any(
+            any(
+                value is not None
+                for value in (
+                    item.traffic_source_for_you,
+                    item.traffic_source_profile,
+                    item.traffic_source_following,
+                    item.traffic_source_search,
+                )
+            )
+            for item in manual_insights
+        ),
+        "視聴者属性": any(item.audience_gender or item.audience_age_range or item.audience_region for item in manual_insights),
+        "冒頭3秒": any(item.first_3sec_summary or item.hook_text for item in creative_notes),
+        "動画構成": any(item.video_structure for item in creative_notes),
+        "CTA": any(item.cta_type or item.cta_text for item in creative_notes),
+        "顔出し有無": any(item.face_visible is not None for item in creative_notes),
+        "声出し有無": any(item.voiceover is not None for item in creative_notes),
+        "PR有無": any(item.is_pr is not None for item in creative_notes),
     }
-
-
-def _reference_account_summaries(reference_posts: list[Post]) -> list[dict[str, Any]]:
-    grouped: dict[str, list[Post]] = {}
-    for post in reference_posts:
-        grouped.setdefault(getattr(post, "account_name", DATA_INSUFFICIENT), []).append(post)
-
-    summaries = []
-    for account_name, posts in sorted(grouped.items()):
-        views = [post.views for post in posts]
-        genres = top_terms(post.genre for post in posts)
-        hooks = [post.hook for post in posts if post.hook][:3]
-        summaries.append(
+    table = []
+    for metric, input_file, benefit in MANUAL_REQUIRED_METRICS:
+        has_value = manual_values.get(metric, False)
+        if has_value:
+            status = "一部入力あり"
+            reason = "手入力データがあります。入力がある投稿に限定して分析できます。"
+        elif metric == "PR有無" and rows:
+            status = "自動推定のみ"
+            reason = "caption内の#PR等で候補判定は可能ですが、確定にはcreative_notes.csvへの入力が必要です。"
+        else:
+            status = "未入力"
+            reason = "TikTok公式の公開動画APIでは通常取得できないため、手入力が必要です。"
+        table.append(
             {
-                "account_name": account_name,
-                "post_count": len(posts),
-                "average_views": mean(views),
-                "top_genres": genres,
-                "hooks": hooks,
+                "metric": metric,
+                "status": status,
+                "reason": reason,
+                "input": input_file,
+                "benefit": benefit,
             }
         )
-    return summaries
+    return table
 
 
-def _reference_adopt_points(
-    reference_traits: dict[str, Any],
-    self_traits: dict[str, Any],
-    top_reference_posts: list[Post],
-) -> list[str]:
-    points = []
-    reference_genres = [item for item, _ in reference_traits["genres"]]
-    self_genres = {item for item, _ in self_traits["genres"]}
-    genre_gaps = [genre for genre in reference_genres if genre not in self_genres]
-    if genre_gaps:
-        points.append(f"参考上位投稿で強い「{safe_join(genre_gaps[:3])}」は、自アカウントの勝ち筋と隣接する場合だけ検証候補にしてください。")
-    if reference_traits["hooks"]:
-        points.append(f"冒頭は「{reference_traits['hooks'][0]}」のように、悩み・損失・変化を1文で出す型を取り入れる余地があります。")
-    if reference_traits["structures"]:
-        points.append(f"構成は「{reference_traits['structures'][0]}」をそのままコピーせず、自分の素材で再現できる手順に分解してください。")
-    if any(post.has_cta for post in top_reference_posts):
-        points.append("参考上位投稿にはCTAが含まれるため、保存促し・質問誘導・フォロー理由を投稿目的ごとに使い分けてください。")
-    return points or ["投稿単位の差分が小さいため、まずは冒頭3秒とCTAだけを参考にしてください。"]
-
-
-def _reference_avoid_points(reference_traits: dict[str, Any], self_traits: dict[str, Any]) -> list[str]:
-    points = [
-        "参考投稿の構成やテロップを丸写しせず、悩みの切り口・構成順・CTAだけを抽出してください。",
-        "自アカウントのターゲットから外れるジャンルは、再生数が高くても優先度を下げてください。",
-    ]
-    reference_duration = [item for item, _ in reference_traits["duration_buckets"]]
-    self_duration = [item for item, _ in self_traits["duration_buckets"]]
-    if reference_duration and self_duration and reference_duration[0] != self_duration[0]:
-        points.append(f"参考上位投稿の尺は「{reference_duration[0]}」が多い一方、自アカウント上位は「{self_duration[0]}」です。尺は急に寄せず、段階的に検証してください。")
-    return points
-
-
-def _reference_differentiation_points(reference_traits: dict[str, Any], self_traits: dict[str, Any]) -> list[str]:
-    reference_hashtags = [item for item, _ in reference_traits["hashtags"]]
-    self_hashtags = [item for item, _ in self_traits["hashtags"]]
-    points = []
-    if self_hashtags:
-        points.append(f"自アカウントは「{safe_join(self_hashtags[:3])}」を軸に、参考アカウントより対象者を狭く見せると差別化しやすいです。")
-    if reference_hashtags:
-        points.append(f"参考側で多い「{safe_join(reference_hashtags[:3])}」は、汎用タグとして使いすぎず投稿内容に合うものだけ採用してください。")
-    points.append("差別化は編集装飾より、誰のどの場面の悩みを解決するかを具体化する方が効果検証しやすいです。")
-    return points
-
-
-def _reference_evidence_lines(metrics: list[PostMetric]) -> list[str]:
-    lines = []
-    for metric in metrics:
-        post = metric.post
-        account_name = getattr(post, "account_name", DATA_INSUFFICIENT)
-        views = post.views if post.views is not None else DATA_INSUFFICIENT
-        lines.append(
-            f"{account_name} / {post.title}: 再生数 {views}、冒頭「{post.hook or DATA_INSUFFICIENT}」、構成 {post.structure or DATA_INSUFFICIENT}"
-        )
-    return lines or ["データ不足"]
-
-
-def _build_strategy(
-    account: AccountProfile,
-    summary: dict[str, Any],
-    performance: dict[str, Any],
-    habits: dict[str, Any],
-    trend_analysis: dict[str, Any],
-) -> dict[str, Any]:
-    strongest_genres = [item for item, _ in performance["top_common"]["genres"]]
-    weak_genres = [item for item, _ in performance["weak_common"]["genres"]]
-    top_issue = "データ不足"
-    if summary["post_count"] == 0:
-        top_issue = "投稿データがないため、まず10本分の投稿実績を入力すること"
-    elif summary["post_count"] < 10:
-        top_issue = "投稿数が少なく、勝ち筋判断が暫定であること"
-    elif habits["weekly_frequency"] is not None and habits["weekly_frequency"] < 3:
-        top_issue = "検証に必要な投稿頻度が不足していること"
-    else:
-        top_issue = "伸びた投稿の型を次の10投稿で再現検証すること"
-
-    first_priority = "次の10投稿では、伸びたジャンルと冒頭構成を固定し、CTAと保存理由だけを変えて検証してください。"
-    if strongest_genres:
-        first_priority = f"次の10投稿では「{strongest_genres[0]}」を主軸にし、冒頭3秒・CTA・保存理由を変えて検証してください。"
-
+def _analyze_viral(rows: list[dict[str, Any]], viral_posts: list[dict[str, Any]]) -> dict[str, Any]:
+    repeat_patterns = Counter(
+        (row.get("hook_type"), row.get("video_structure"))
+        for row in rows
+        if row.get("hook_type") or row.get("video_structure")
+    )
+    reproducible = []
+    low_reproducibility = []
+    for row in viral_posts:
+        creative_ready = bool(row.get("hook_text") or row.get("video_structure"))
+        beauty_related = row["strategy_category"] in {"beauty_core", "beauty_adjacent"}
+        pattern_count = repeat_patterns[(row.get("hook_type"), row.get("video_structure"))]
+        if beauty_related and creative_ready and pattern_count >= 2:
+            reproducible.append(row)
+        else:
+            low_reproducibility.append(row)
     return {
-        "current_state": f"{account.genre}として運用中。数値は{summary['data_sufficiency']}です。",
-        "biggest_issue": top_issue,
-        "first_priority": first_priority,
-        "positioning": f"{account.target_audience}に向けて、{account.genre}の実用情報を届けるアカウントとして一貫性を高める余地があります。",
-        "strengths": _strategy_strengths(performance, trend_analysis),
-        "weaknesses": _strategy_weaknesses(performance, habits),
-        "grow_categories": strongest_genres or [account.genre],
-        "drop_or_reduce_categories": weak_genres[:3] or ["データ不足"],
-        "thirty_day_policy": "週3-5本で、勝ち筋ジャンルを増やすより、既存の伸びた型の再現性を検証する30日にしてください。",
+        "viral_posts": viral_posts,
+        "reproducible": reproducible,
+        "low_reproducibility": low_reproducibility,
+        "confidence": "信頼度B" if viral_posts else "信頼度D",
     }
 
 
-def _strategy_strengths(performance: dict[str, Any], trend_analysis: dict[str, Any]) -> list[str]:
-    strengths = []
-    top_genres = [item for item, _ in performance["top_common"]["genres"]]
-    if top_genres:
-        strengths.append(f"上位投稿に「{safe_join(top_genres)}」の共通点があります。")
-    if trend_analysis["easy_to_apply"]:
-        strengths.append("手動入力されたトレンドと既存投稿ジャンルに重なりがあります。")
-    return strengths or ["強みを判断するには、投稿実績と投稿メモの追加が必要です。"]
+def _analyze_beauty(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    core = [row for row in rows if row["strategy_category"] == "beauty_core"]
+    adjacent = [row for row in rows if row["strategy_category"] == "beauty_adjacent"]
+    unrelated = [row for row in rows if row["strategy_category"] in {"lifestyle", "personal", "unrelated"}]
+    ordered_core = sorted(core, key=lambda row: row.get("view_count") or 0, reverse=True)
+    return {
+        "core_count": len(core),
+        "adjacent_count": len(adjacent),
+        "unrelated_count": len(unrelated),
+        "core_summary": _scope_summary(core),
+        "top_core": ordered_core[:5],
+        "weak_core": list(reversed(ordered_core[-5:])),
+        "missing": "creative_notes.csvが不足すると、冒頭3秒・構成・CTAの共通点は判断できません。",
+        "confidence": calculate_confidence_level(len(core), True, _coverage(len(rows), sum(1 for row in core if row.get("creative")))),
+    }
 
 
-def _strategy_weaknesses(performance: dict[str, Any], habits: dict[str, Any]) -> list[str]:
-    weaknesses = []
-    weak_genres = [item for item, _ in performance["weak_common"]["genres"]]
-    if weak_genres:
-        weaknesses.append(f"下位投稿に「{safe_join(weak_genres)}」が含まれています。テーマの見せ方を再設計してください。")
-    if habits["cta_ratio"] is not None and habits["cta_ratio"] < 0.7:
-        weaknesses.append("投稿ごとの役割とCTAが不足しています。")
-    return weaknesses or ["弱みを判断するには、下位投稿のメモと冒頭3秒の入力が必要です。"]
+def _analyze_pr(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    pr = [row for row in rows if row["pr_status"] in {"明示PR", "PR疑い"}]
+    non_pr = [row for row in rows if row["pr_status"] == "非PR"]
+    return {
+        "status_counts": Counter(row["pr_status"] for row in rows).most_common(),
+        "pr_summary": _scope_summary(pr),
+        "non_pr_summary": _scope_summary(non_pr),
+        "confidence": "信頼度B" if pr or non_pr else "信頼度D",
+    }
+
+
+def _analyze_habits(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    all_summary = _scope_summary(rows)
+    return {
+        "weekly_frequency": _weekly_frequency(rows),
+        "average_post_interval_days": all_summary["average_post_interval_days"],
+        "max_post_interval_days": all_summary["max_post_interval_days"],
+        "day_counts": all_summary["day_counts"],
+        "time_buckets": all_summary["time_buckets"],
+        "confidence": all_summary["confidence"],
+    }
+
+
+def _analyze_hashtags(rows: list[dict[str, Any]], median_views: float | None) -> dict[str, Any]:
+    groups = hashtag_groups(rows, median_views)
+    return {
+        "groups": groups,
+        "caption_notes": _caption_notes(rows),
+        "confidence": "信頼度B" if rows else "信頼度D",
+    }
+
+
+def _analyze_creative(rows: list[dict[str, Any]], creative_by_id: dict[str, CreativeNote]) -> dict[str, Any]:
+    if not creative_by_id:
+        return {
+            "available": False,
+            "confidence": "信頼度D",
+            "message": "creative_notes.csv が未入力のため、冒頭3秒、構成、CTA、テロップ密度は判断しません。",
+            "required_fields": [
+                "hook_text",
+                "hook_type",
+                "first_3sec_summary",
+                "video_structure",
+                "cta_type",
+                "text_density",
+                "save_reason",
+                "comment_prompt",
+            ],
+        }
+    creative_rows = [row for row in rows if row.get("creative")]
+    return {
+        "available": True,
+        "hook_types": Counter(row["hook_type"] for row in creative_rows if row["hook_type"]).most_common(),
+        "structures": Counter(row["video_structure"] for row in creative_rows if row["video_structure"]).most_common(),
+        "cta_types": Counter(row["cta_type"] for row in creative_rows if row["cta_type"]).most_common(),
+        "text_density": Counter(row["text_density"] for row in creative_rows if row["text_density"]).most_common(),
+        "confidence": calculate_confidence_level(len(rows), True, _coverage(len(rows), len(creative_rows))),
+    }
+
+
+def _analyze_trends(trend_research: list[TrendResearch]) -> dict[str, Any]:
+    if not trend_research:
+        return {
+            "available": False,
+            "confidence": "信頼度D",
+            "message": "trend_research.csv が未入力のため、現在トレンドとの適合は判断しません。",
+            "manual_research_items": [
+                "Creative Centerの美容関連ハッシュタグ",
+                "美容・コスメ領域の流行音源",
+                "買う前チェック型の冒頭フック",
+                "Qoo10メガ割や季節キーワード",
+                "テロップ密度と尺の傾向",
+            ],
+        }
+    usable = [item for item in trend_research if item.should_use is True]
+    avoid = [item for item in trend_research if item.should_use is False]
+    return {"available": True, "usable": usable, "avoid": avoid, "confidence": "信頼度C"}
+
+
+def _analyze_competitors(competitor_posts: list[CompetitorPost]) -> dict[str, Any]:
+    if not competitor_posts:
+        return {
+            "available": False,
+            "confidence": "信頼度D",
+            "message": "competitor_posts.csv が未入力のため、参考アカウント分析は実施しません。",
+        }
+    allowed_targets = {"hook", "structure", "cta", "text_density", "duration", "comment_prompt", "save_prompt"}
+    adaptable = [
+        item
+        for item in competitor_posts
+        if item.should_adapt is True and (item.adaptation_target in allowed_targets or not item.adaptation_target)
+    ]
+    return {
+        "available": True,
+        "adaptable": adaptable,
+        "hook_types": Counter(item.hook_type for item in adaptable if item.hook_type).most_common(),
+        "structures": Counter(item.video_structure for item in adaptable if item.video_structure).most_common(),
+        "cta_types": Counter(item.cta_type for item in adaptable if item.cta_type).most_common(),
+        "durations": Counter(item.duration for item in adaptable if item.duration is not None).most_common(),
+        "confidence": "信頼度C" if adaptable else "信頼度D",
+        "copy_guardrail": "参考アカウントから輸入するのは型だけです。テーマ、台本、固有表現、映像構成の丸写しはしません。",
+    }
 
 
 def _generate_video_ideas(
-    account: AccountProfile,
-    performance: dict[str, Any],
-    trend_analysis: dict[str, Any],
-    competitors: list[dict[str, Any]],
+    rows: list[dict[str, Any]],
+    trend_research: list[TrendResearch],
+    competitor_posts: list[CompetitorPost],
 ) -> list[dict[str, str]]:
-    main_genre = _first_or_default([item for item, _ in performance["top_common"]["genres"]], account.genre)
-    trend_hooks = []
-    trend_structures = []
-    trend_sounds = []
-    for item in trend_analysis["easy_to_apply"] + trend_analysis["used_trends"]:
-        trend_hooks.extend(item.get("opening_hooks", []))
-        trend_structures.extend(item.get("video_structures", []))
-    for trend in trend_analysis["easy_to_apply"]:
-        trend_sounds.extend(trend.get("matched_sounds", []))
-    competitor_hooks = []
-    for competitor in competitors:
-        competitor_hooks.extend(_list_value(competitor.get("opening_hooks")))
-    hooks = trend_hooks + competitor_hooks + [
-        "これやってる人、損してるかも",
-        "買う前にまずこれ試して",
-        "一人暮らしで失敗しやすいこと",
-    ]
-    structures = trend_structures + [
-        "悩み提示 > 3つの改善策 > 実例 > 保存促し",
-        "NG行動 > 理由 > 代替案 > コメント誘導",
-        "Before > 手順 > After > フォロー理由",
-    ]
-    sounds = trend_sounds + ["手動調査した流行音源", "既存上位投稿で使った音源"]
-    themes = [
-        "買ってよかったではなく買う前に試す収納術",
-        "食費を減らす買い物前ルール",
-        "洗濯・掃除のNG行動",
-        "月末に見直す固定費",
-        "玄関・冷蔵庫・デスクのBefore/After",
-        "コメントで割れそうな節約判断",
-        "保存したくなるチェックリスト",
-        "失敗談から入る暮らし改善",
-        "3分でできるリセット習慣",
-        "初心者がやりがちな片付けミス",
-        "フォロワーの悩みに答えるQ&A",
-        "過去上位投稿の続編",
+    top_beauty = [
+        row
+        for row in sorted(rows, key=lambda item: item.get("view_count") or 0, reverse=True)
+        if row["strategy_category"] in {"beauty_core", "beauty_adjacent"}
+    ][:3]
+    evidence = "; ".join(
+        f"{row['video_id']}({format_number(row.get('view_count'))}再生)" for row in top_beauty
+    ) or "美容本流の手入力メモが不足しているため、暫定案"
+    trend_evidence = ", ".join(item.trend_name for item in trend_research if item.should_use is True) or "手動トレンド未入力"
+    competitor_evidence = ", ".join(
+        item.hook_type or item.video_structure
+        for item in competitor_posts
+        if item.should_adapt is True and item.adaptation_target in {"hook", "structure", "cta", "text_density"}
+    ) or "参考投稿の型メモ未入力"
+    templates = [
+        ("そのリップ買う前に見るべき3つのポイント", "買う前チェック", "リップ購入で失敗したくない人"),
+        ("Qoo10メガ割で失敗しにくい韓国コスメの選び方", "購入候補整理", "韓国コスメを比較検討している人"),
+        ("PR商品を正直レビューするときに見るべきポイント", "PRの信頼性改善", "PR投稿でも本音を知りたい人"),
+        ("敏感肌向けスキンケア、買う前に確認したい成分", "保存理由の強化", "肌荒れしやすい人"),
+        ("秋リップで失敗しやすい色選び3つ", "季節需要の検証", "季節リップを探す人"),
+        ("使い切って分かった本音レビュー", "信頼性強化", "購入前に長期使用感を知りたい人"),
+        ("バズコスメ、本当に良かったところ・微妙だったところ", "バズ検証", "話題商品を買うか迷う人"),
+        ("似合う人と似合わない人が分かれるリップ", "対象者明確化", "自分に合う色を知りたい人"),
+        ("初心者がベースメイクでやりがちな失敗", "初心者向け教育", "メイク初心者"),
+        ("1週間使って分かったスキンケアの正直感想", "継続使用レビュー", "スキンケア選びで迷う人"),
     ]
     ideas = []
-    for index, theme in enumerate(themes[:12], start=1):
+    for index, (title, goal, target) in enumerate(templates, start=1):
         ideas.append(
             {
                 "number": str(index),
-                "title": f"{theme}：{main_genre}編",
-                "goal": "保存・コメント・フォロー転換のどれが伸びるかを検証する",
-                "target": account.target_audience,
-                "hook": hooks[(index - 1) % len(hooks)],
-                "structure": structures[(index - 1) % len(structures)],
-                "duration": "25-40秒",
-                "sound": sounds[(index - 1) % len(sounds)],
-                "caption": "悩みを1文で示し、各カットは12文字前後の短いテロップにする",
-                "cta": "保存して次の買い物前に見返してください / あなたはどっち派？",
-                "hypothesis": "冒頭で悩みを具体化し、最後に保存理由を置くと保存率とフォロー転換率が上がる可能性があります。",
-                "success_kpi": "再生数中央値超え、保存率平均超え、フォロー転換率平均超え",
+                "title": title,
+                "goal": goal,
+                "target": target,
+                "hook": f"冒頭で「{title}」を短く提示し、買う前の不安を1つに絞る",
+                "structure": "悩み提示 → 比較/確認ポイント3つ → 正直な注意点 → 向いている人/向かない人",
+                "duration": "20〜35秒",
+                "sound": "美容レビューの説明が聞き取りやすいBGM。流行音源はtrend_research.csvで確認後に採用",
+                "caption": "要点を1画面1メッセージで表示。商品名、良い点、注意点を分ける",
+                "cta": "保存して買う前に見返してね / あなたはどれが気になる？",
+                "hypothesis": "買う前チェック型は保存・コメントにつながる可能性がある。保存率はmanual_insights入力後に検証する",
+                "success_kpi": "API: 中央値比、いいね率、コメント率、シェア率。手入力後: 保存率、完視聴率",
+                "evidence": f"{evidence} / trend: {trend_evidence} / reference pattern: {competitor_evidence}",
+                "confidence": "信頼度C",
+                "note": "暫定案。creative_notes と manual_insights の入力後に優先順位を再評価する",
             }
         )
     return ideas
 
 
-def _generate_operation_plan(
-    account: AccountProfile,
-    performance: dict[str, Any],
-    trend_analysis: dict[str, Any],
-) -> list[dict[str, str]]:
-    main_genre = _first_or_default([item for item, _ in performance["top_common"]["genres"]], account.genre)
-    trend_name = trend_analysis["easy_to_apply"][0]["name"] if trend_analysis["easy_to_apply"] else "手動入力したトレンド"
+def _generate_operation_plan() -> list[dict[str, str]]:
     return [
         {
             "week": "Week 1",
-            "posts": "3-4本",
-            "theme": "現状の勝ち筋確認",
-            "genres": main_genre,
-            "improvement": "上位投稿と同じジャンルで、冒頭3秒だけを変えた投稿を作る",
-            "kpi": "再生数、完視聴率、平均視聴維持率",
+            "posts": "3本",
+            "theme": "買う前チェック型を3本",
+            "genres": "リップ、スキンケア、ベースメイク",
+            "improvement": "creative_notes.csvに冒頭3秒、構成、CTAを必ず記録",
+            "kpi": "中央値比、いいね率、コメント率、シェア率",
+            "manual_data": "保存数、完視聴率、平均視聴時間",
         },
         {
             "week": "Week 2",
-            "posts": "4-5本",
-            "theme": "保存理由の検証",
-            "genres": f"{main_genre} + チェックリスト型",
-            "improvement": "最後に保存する理由を明示し、保存率を比較する",
-            "kpi": "保存率、プロフィール遷移率、フォロー転換率",
+            "posts": "3〜4本",
+            "theme": "正直レビューと比較",
+            "genres": "韓国コスメ比較、Qoo10候補、PR商品の見せ方",
+            "improvement": "PR/非PRを分けて比較できるようis_prを入力",
+            "kpi": "PR/非PR別中央値、コメント率",
+            "manual_data": "profile_views、follows_from_video",
         },
         {
             "week": "Week 3",
-            "posts": "4-5本",
-            "theme": "トレンド構成の取り込み",
-            "genres": trend_name,
-            "improvement": "流行構成を丸ごと真似ず、自分のジャンルに合う冒頭と編集テンポだけ取り入れる",
-            "kpi": "再生数、シェア率、コメント率",
+            "posts": "3〜4本",
+            "theme": "使い切り・1週間使用レビュー",
+            "genres": "スキンケア、リップ、ベースメイク",
+            "improvement": "保存理由とコメント誘導を変えて検証",
+            "kpi": "保存率、完視聴率、平均視聴維持率",
+            "manual_data": "saves、average_watch_time、completion_rate",
         },
         {
             "week": "Week 4",
             "posts": "4本",
-            "theme": "再現性チェック",
-            "genres": f"{main_genre}の上位2フォーマット",
-            "improvement": "最も良かった2型を再投稿ではなく別テーマで再現する",
-            "kpi": "中央値比、保存率、フォロー転換率、プロフィール遷移率",
+            "theme": "反応が良かった型の再投稿検証",
+            "genres": "Week1-3の上位カテゴリ",
+            "improvement": "同じ型で2本以上の再現性を確認",
+            "kpi": "直近10投稿中央値、中央値比、投稿間隔",
+            "manual_data": "traffic_source、audience_region",
         },
     ]
 
 
-def _generate_kpi_design(summary: dict[str, Any]) -> dict[str, list[str]]:
+def _generate_kpi_design() -> dict[str, list[str]]:
     return {
-        "primary": [
-            "フォロー転換率: 趣味投稿から成長アカウントへ変える目的に直結するため最重要",
-            "保存率: 実用系コンテンツとして価値が伝わっているかを見る",
+        "api_only": [
+            "再生数",
+            "中央値比",
+            "いいね率",
+            "コメント率",
+            "シェア率",
+            "投稿頻度",
+            "投稿間隔",
+            "動画尺別中央値",
         ],
-        "secondary": [
-            "完視聴率: 冒頭と構成の強さを見る",
-            "平均視聴維持率: 尺が長すぎないかを見る",
-            "コメント率: 共感・反論・質問の余白を見る",
-            "プロフィール遷移率: アカウント導線の強さを見る",
-        ],
-        "per_post": [
-            "再生数、いいね率、コメント率、保存率、シェア率、プロフィール遷移率、フォロー転換率、完視聴率",
-        ],
-        "weekly": [
-            "投稿本数、ジャンル別中央値、冒頭フック別の完視聴率、CTA別の保存率",
-        ],
-        "monthly": [
-            "フォロワー増加数、上位投稿の共通点、下位投稿の共通点、伸ばすカテゴリと減らすカテゴリ",
-        ],
-        "decision_rules": [
-            f"再生数は中央値 {format_number(summary.get('median_views'))} を基準にし、中央値超えを一次成功とする",
-            "保存率またはフォロー転換率が平均を超えた投稿は、同じ型で最低2本追加検証する",
-            "3本続けて中央値を下回るテーマは、冒頭・対象者・保存理由のどれかを変更してから再検証する",
+        "manual_required": [
+            "保存率",
+            "プロフィール遷移率",
+            "フォロー転換率",
+            "完視聴率",
+            "平均視聴維持率",
+            "流入元別成果",
         ],
     }
 
 
-def _generate_hypotheses(
-    performance: dict[str, Any],
-    habits: dict[str, Any],
-    trend_analysis: dict[str, Any],
-) -> list[dict[str, str]]:
-    top_genre = _first_or_default([item for item, _ in performance["top_common"]["genres"]], "上位ジャンル")
-    weak_genre = _first_or_default([item for item, _ in performance["weak_common"]["genres"]], "下位ジャンル")
-    trend_name = trend_analysis["easy_to_apply"][0]["name"] if trend_analysis["easy_to_apply"] else "手動調査トレンド"
+def _generate_hypotheses() -> list[dict[str, str]]:
     return [
         {
             "priority": "高",
-            "hypothesis": f"{top_genre}は保存する理由が明確なため、再生数と保存率が伸びやすい",
-            "method": "同ジャンルで冒頭だけ違う投稿を3本作る",
-            "posts_needed": "3本",
-            "success": "3本中2本が中央値再生数と平均保存率を超える",
-            "next_action": "勝ち型として週2本の定番枠にする",
+            "hypothesis": "買う前チェック型は美容アカウントで保存率を上げる可能性がある",
+            "data": "creative_notes、manual_insights",
+            "method": "同じ構成で3本投稿し、保存率と完視聴率を比較",
+            "posts": "3本",
+            "success": "中央値比1.5倍以上、保存率が過去中央値以上",
+            "confidence": "信頼度C",
+            "action": "hook_type=買う前チェックで記録して投稿",
         },
         {
             "priority": "高",
-            "hypothesis": "CTAを明確にすると保存率またはコメント率が上がる",
-            "method": "CTAあり/なしではなく、保存促し/質問誘導/フォロー理由の3種類で比較する",
-            "posts_needed": "6本",
-            "success": "CTA別に最も高いKPIが明確になる",
-            "next_action": "投稿目的ごとにCTAテンプレートを固定する",
+            "hypothesis": "PR投稿は正直な注意点を入れるとコメント率が下がりにくい可能性がある",
+            "data": "creative_notesのis_pr、cta_type、manual_insights",
+            "method": "PR候補と非PRを分けて中央値とコメント率を比較",
+            "posts": "PR 3本 / 非PR 3本",
+            "success": "PR投稿のコメント率が非PR中央値の70%以上",
+            "confidence": "信頼度C",
+            "action": "PR表記と注意点を明示して投稿",
         },
         {
             "priority": "中",
-            "hypothesis": f"{trend_name}の構成だけを取り入れると、既存ジャンルでも完視聴率が上がる",
-            "method": "音源を無理に合わせず、冒頭と構成を合わせた投稿を3本作る",
-            "posts_needed": "3本",
-            "success": "完視聴率または平均視聴維持率が平均を超える",
-            "next_action": "効果があった構成をテンプレート化する",
-        },
-        {
-            "priority": "中",
-            "hypothesis": f"{weak_genre}は対象者と見る理由を明確化すれば改善できる可能性がある",
-            "method": "同テーマを悩み起点の冒頭に変えて2本再検証する",
-            "posts_needed": "2本",
-            "success": "過去同ジャンルの再生数を超える",
-            "next_action": "改善しなければ投稿比率を下げる",
-        },
-        {
-            "priority": "低",
-            "hypothesis": "投稿時間帯を夜に寄せると初速が安定する可能性がある",
-            "method": "同じ型の投稿を20時台と22時台で比較する",
-            "posts_needed": "4本",
-            "success": "片方の時間帯で中央値比が明確に高い",
-            "next_action": "次月の標準投稿時間にする",
+            "hypothesis": "20〜35秒の比較レビューは完視聴率と保存率のバランスが良い可能性がある",
+            "data": "API duration、manual_insights completion_rate/saves",
+            "method": "尺別中央値、完視聴率、保存率を比較",
+            "posts": "各尺3本",
+            "success": "20〜35秒が2指標以上で上位",
+            "confidence": "信頼度C",
+            "action": "尺を固定して比較レビューを投稿",
         },
     ]
 
@@ -639,51 +537,59 @@ def _generate_hypotheses(
 def _generate_backlog() -> dict[str, list[str]]:
     return {
         "すぐやる": [
-            "次の10投稿で検証する主ジャンルを1-2個に絞る",
-            "各投稿に保存・コメント・フォローのどれを狙うかを設定する",
-            "冒頭3秒、構成、CTA、投稿メモを必ず入力する",
+            "data/tiktok_videos.local.csvをapi_postsとして残し、creative_notes.csvを動画ID単位で入力する",
+            "保存数、完視聴率、平均視聴時間をmanual_insights.csvへ10本分転記する",
+            "PR投稿のis_prとPR表記を確認する",
         ],
         "次の10投稿で試す": [
-            "NG行動3つ形式",
-            "Before/Afterを冒頭に見せる形式",
-            "保存用チェックリスト形式",
-            "コメントが割れる質問CTA",
+            "買う前チェック型を3本",
+            "正直レビュー型を3本",
+            "使い切り/1週間レビュー型を2本",
+            "似合う人・似合わない人型を2本",
         ],
         "30日以内にやる": [
-            "プロフィール文を、誰向け・何が得られるか・投稿頻度の3点で書き直す",
-            "固定投稿を、アカウントの代表テーマ3本に整理する",
-            "週次でKPIを見返す運用メモを作る",
+            "直近10投稿中央値を追跡",
+            "PR/非PR別の中央値比較",
+            "美容本流以外の投稿を分析から分離",
         ],
-        "余裕があればやる": [
-            "TikTok Creative Centerの手動調査結果の取り込み",
-            "Google Trendsとの比較",
-            "YouTube Shorts / Instagram Reelsの参考情報取り込み",
-            "投稿ネタ管理",
-            "投稿カレンダー生成",
-            "動画台本生成",
-            "冒頭フック生成",
-            "サムネイル文言生成",
-            "過去レポートとの比較",
-            "ダッシュボード化",
-            "LLM API連携による定性分析強化",
+        "データ入力を増やしてからやる": [
+            "保存率を軸にした投稿構成比較",
+            "完視聴率を使った尺の最適化",
+            "流入元別の改善案",
+        ],
+        "外部ツール連携候補": [
+            "TikTok Creative Centerの手動調査結果CSV",
+            "Google Trendsの美容キーワードCSV",
+            "過去レポート比較",
         ],
         "やらない方がよい": [
-            "自動ログイン、自動投稿、自動いいね、自動フォロー、自動コメント",
-            "スクレイピングによる無断データ収集",
-            "フォロワー購入や再生数水増し",
-            "他人のコンテンツの無断転載",
-            "根拠のない成功保証やバズ断定",
+            "スクレイピング",
+            "自動ログイン",
+            "自動投稿・自動エンゲージメント",
+            "非美容テーマを美容アカウントの改善案に混ぜる",
         ],
     }
 
 
-def _list_value(value: Any) -> list[str]:
-    if value is None:
-        return []
-    if isinstance(value, list):
-        return [str(item) for item in value if str(item)]
-    return [part.strip() for part in str(value).replace("、", ",").split(",") if part.strip()]
+def _weekly_frequency(rows: list[dict[str, Any]]) -> float | None:
+    dates = sorted(row["posted_dt"] for row in rows if row.get("posted_dt") is not None)
+    if len(dates) < 2:
+        return None
+    span_days = max(1, (dates[-1] - dates[0]).days + 1)
+    return len(dates) / span_days * 7
 
 
-def _first_or_default(values: list[str], default: str) -> str:
-    return values[0] if values else default
+def _caption_notes(rows: list[dict[str, Any]]) -> list[str]:
+    if not rows:
+        return ["投稿がないため判断不可。"]
+    pr_count = sum(1 for row in rows if row["pr_status"] in {"明示PR", "PR疑い"})
+    return [
+        f"PR候補は{pr_count}本。PR表記は自動推定のため、creative_notes.csvで確定してください。",
+        "ハッシュタグは出現回数で分類し、1回だけのタグは戦略判断には使いません。",
+    ]
+
+
+def _coverage(total: int, filled: int) -> float:
+    if total <= 0:
+        return 0.0
+    return filled / total

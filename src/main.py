@@ -6,7 +6,14 @@ from pathlib import Path
 
 from analyzer import analyze
 from llm_client import LLMConfig, maybe_run_llm_analysis
-from loaders import load_account_profile, load_competitors, load_posts_csv, load_reference_posts_csv, load_trends
+from loaders import (
+    load_account_profile,
+    load_api_posts,
+    load_competitor_posts,
+    load_creative_notes,
+    load_manual_insights,
+    load_trend_research,
+)
 from report_generator import write_markdown_report
 from tiktok_api import (
     DEFAULT_SCOPES,
@@ -45,10 +52,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _add_report_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--account", default="data/account_profile.sample.json", help="Path to account profile JSON.")
-    parser.add_argument("--posts", default="data/posts.sample.csv", help="Path to posts CSV.")
-    parser.add_argument("--trends", default="data/trends.sample.json", help="Path to trends JSON.")
-    parser.add_argument("--competitors", default="data/competitors.sample.json", help="Path to competitors JSON.")
-    parser.add_argument("--competitor-posts", default="data/competitor_posts.sample.csv", help="Path to competitor/reference posts CSV.")
+    parser.add_argument("--api-posts", "--posts", dest="api_posts", default="data/api_posts.sample.csv", help="Path to official API posts CSV/JSON.")
+    parser.add_argument("--manual-insights", default="data/manual_insights.sample.csv", help="Path to manually entered TikTok Studio insight CSV/JSON.")
+    parser.add_argument("--creative-notes", default="data/creative_notes.sample.csv", help="Path to manually entered creative notes CSV/JSON.")
+    parser.add_argument("--trend-research", "--trends", dest="trend_research", default="data/trend_research.sample.csv", help="Path to manually researched trend CSV/JSON.")
+    parser.add_argument("--competitor-posts", default="data/competitor_posts.sample.csv", help="Path to competitor/reference post pattern CSV/JSON.")
+    parser.add_argument("--competitors", default=None, help=argparse.SUPPRESS)
     parser.add_argument("--llm-provider", default="none", choices=["none", "openai", "anthropic"], help="Optional external LLM provider.")
     parser.add_argument("--llm-model", default=None, help="Model ID for the selected LLM provider.")
     parser.add_argument("--llm-max-input-chars", type=int, default=12000, help="Maximum characters sent to the LLM.")
@@ -103,11 +112,20 @@ def _add_tiktok_parsers(subparsers: argparse._SubParsersAction) -> None:
 
 def run_report(args: argparse.Namespace) -> int:
     account = load_account_profile(args.account)
-    posts = load_posts_csv(args.posts)
-    trends = load_trends(args.trends)
-    competitors = load_competitors(args.competitors)
-    competitor_posts = load_reference_posts_csv(args.competitor_posts)
-    analysis = analyze(account, posts, trends, competitors, competitor_posts)
+    api_posts = load_api_posts(args.api_posts)
+    manual_insights = load_manual_insights(args.manual_insights)
+    creative_notes = load_creative_notes(args.creative_notes)
+    trend_research = load_trend_research(args.trend_research)
+    competitor_posts = load_competitor_posts(args.competitor_posts)
+    analysis = analyze(account, api_posts, manual_insights, creative_notes, trend_research, competitor_posts)
+    analysis["input_files"] = {
+        "account": args.account,
+        "api_posts": args.api_posts,
+        "manual_insights": args.manual_insights,
+        "creative_notes": args.creative_notes,
+        "trend_research": args.trend_research,
+        "competitor_posts": args.competitor_posts,
+    }
     analysis["llm_analysis"] = maybe_run_llm_analysis(
         analysis,
         LLMConfig(

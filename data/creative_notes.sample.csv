@@ -1,0 +1,7 @@
+video_id,account_strategy_category,content_category,is_beauty_core,is_pr,product_brand,product_name,product_type,hook_text,hook_type,first_3sec_summary,video_structure,cta_type,cta_text,face_visible,voiceover,text_density,cut_count,before_after,review_type,target_viewer,viewer_pain,save_reason,comment_prompt,creator_note
+v001,beauty_core,リップ比較,true,false,,,リップ,そのリップ買う前にこの3つ見て,買う前チェック,色もち・乾燥・落ち方を先に提示,悩み提示→3チェック→向く人,保存促し,買う前に保存してね,true,true,中,12,false,正直レビュー,リップ購入前の人,色選びと乾燥が不安,買う前チェックリストになる,どの色が気になる？,
+v002,beauty_core,韓国コスメ比較,true,false,,,スキンケア,Qoo10メガ割で失敗したくない人へ,損失回避,買う前に見るべき基準を提示,比較軸→候補→注意点,コメント誘導,買う予定のコスメ教えて,true,true,高,18,false,比較,韓国コスメ購入予定者,メガ割で買いすぎる,候補整理に使える,メガ割で何買う？,
+v003,beauty_core,PR,true,true,,,スキンケア,PRだけど正直に言うと,正直レビュー,PR商品の良い点と注意点を先出し,良い点→気になる点→向く人,保存促し,PRでも買う前に見返してね,true,true,中,10,false,PRレビュー,PR商品が気になる人,PRの信頼性が不安,注意点が分かる,PRレビューで知りたいことある？,
+v004,beauty_core,スキンケアレビュー,true,false,,,スキンケア,敏感肌は買う前にここ見て,買う前チェック,敏感肌の不安を提示,悩み→成分確認→使用感,保存促し,敏感肌さんは保存してね,false,true,中,9,false,注意点レビュー,敏感肌の人,肌荒れが不安,確認項目になる,敏感肌で困ることは？,
+v011,lifestyle,日常,false,false,,,,冷蔵庫収納を変えた話,日常,収納の変化を提示,Before→After→感想,なし,,false,false,低,6,true,日常,暮らし改善に興味がある人,収納に困る,美容運用とは関係薄い,,今後の美容分析から分離
+v012,personal,ネタ,false,false,,,,昔のメイクネタ,ネタ,昔の単発ネタ,ネタ→反応,コメント誘導,懐かしい？,true,false,低,5,false,ネタ,既存フォロワー,娯楽,再現性は低い,覚えてる？,単発外れ値

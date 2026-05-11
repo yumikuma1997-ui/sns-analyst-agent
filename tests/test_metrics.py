@@ -5,7 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from metrics import calculate_post_metrics, safe_divide, summarize_posts
+from metrics import calculate_post_metrics, safe_divide, summarize_posts, trimmed_mean_excluding_top_percent
 from models import Post
 
 
@@ -44,7 +44,9 @@ class MetricsTest(unittest.TestCase):
         self.assertEqual(summary["average_views"], 100)
         self.assertIn("暫定仮説", summary["data_sufficiency"])
 
+    def test_trimmed_mean_excluding_top_percent(self):
+        self.assertEqual(trimmed_mean_excluding_top_percent([100, 110, 120, 10_000], 25), 110)
+
 
 if __name__ == "__main__":
     unittest.main()
-

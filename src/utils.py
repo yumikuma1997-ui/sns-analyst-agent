@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -67,9 +67,9 @@ def parse_bool(value: Any) -> bool | None:
     text = str(value).strip().lower()
     if not text:
         return None
-    if text in {"true", "yes", "y", "1", "あり", "有", "ctaあり", "ok"}:
+    if text in {"true", "yes", "y", "1", "あり", "有", "可", "ok"}:
         return True
-    if text in {"false", "no", "n", "0", "なし", "無", "ctaなし", "ng"}:
+    if text in {"false", "no", "n", "0", "なし", "無", "不可", "ng"}:
         return False
     return None
 
@@ -79,8 +79,16 @@ def split_tags(value: Any) -> list[str]:
         return []
     if isinstance(value, list):
         return [str(item).strip() for item in value if str(item).strip()]
-    text = str(value).replace("、", " ").replace(",", " ")
+    text = str(value).replace("、", " ").replace(",", " ").replace("\n", " ")
     return [part.strip() for part in text.split() if part.strip()]
+
+
+def extract_hashtags(text: str) -> list[str]:
+    tags = []
+    for part in str(text or "").replace("\n", " ").split():
+        if part.startswith("#") and len(part) > 1:
+            tags.append(part.strip(".,;:!?)）】」』、。"))
+    return tags
 
 
 def ensure_parent_dir(path: str | Path) -> None:
@@ -129,10 +137,6 @@ def top_terms(values: Iterable[str], limit: int = 5) -> list[tuple[str, int]]:
     return Counter(cleaned).most_common(limit)
 
 
-def top_items(values: Iterable[str], limit: int = 5) -> list[str]:
-    return [item for item, _ in top_terms(values, limit)]
-
-
 def safe_join(items: Iterable[str], fallback: str = DATA_INSUFFICIENT) -> str:
     cleaned = [item for item in items if item]
     if not cleaned:
@@ -140,21 +144,50 @@ def safe_join(items: Iterable[str], fallback: str = DATA_INSUFFICIENT) -> str:
     return "、".join(cleaned)
 
 
-def parse_date(value: str) -> datetime | None:
-    if not value:
+def parse_datetime(value: Any) -> datetime | None:
+    if value in (None, ""):
         return None
-    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d"):
+    if isinstance(value, datetime):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    if text.isdigit():
         try:
-            return datetime.strptime(value.strip(), fmt)
+            return datetime.fromtimestamp(int(text), tz=timezone.utc)
+        except (ValueError, OSError):
+            return None
+    for fmt in (
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d",
+        "%Y/%m/%d %H:%M",
+        "%Y/%m/%d",
+        "%Y.%m.%d",
+    ):
+        try:
+            parsed = datetime.strptime(text, fmt)
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=timezone.utc)
+            return parsed
         except ValueError:
             continue
     return None
 
 
-def time_bucket(value: str) -> str:
+def parse_date(value: str) -> datetime | None:
+    parsed = parse_datetime(value)
+    if parsed is None:
+        return None
+    return parsed.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def time_bucket(value: str | None) -> str:
     if not value:
         return DATA_INSUFFICIENT
-    hour_text = value.split(":")[0].strip()
+    hour_text = str(value).split(":")[0].strip()
     try:
         hour = int(hour_text)
     except ValueError:
@@ -171,11 +204,12 @@ def time_bucket(value: str) -> str:
 def duration_bucket(seconds: float | None) -> str:
     if seconds is None:
         return DATA_INSUFFICIENT
-    if seconds < 20:
-        return "20秒未満"
-    if seconds < 35:
-        return "20-34秒"
-    if seconds < 50:
-        return "35-49秒"
-    return "50秒以上"
-
+    if seconds < 15:
+        return "15秒未満"
+    if seconds < 30:
+        return "15-29秒"
+    if seconds < 45:
+        return "30-44秒"
+    if seconds < 60:
+        return "45-59秒"
+    return "60秒以上"
