@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 from analyzer import analyze
@@ -165,6 +166,9 @@ def run_tiktok(args: argparse.Namespace) -> int:
             redirect_uri=args.redirect_uri,
             code_verifier=code_verifier,
         )
+        if not _has_access_token(token_data):
+            _print_token_error("Token exchange failed", token_data)
+            return 1
         save_token_file(args.token_file, token_data)
         print(f"Token saved: {Path(args.token_file).resolve()}")
         return 0
@@ -176,21 +180,30 @@ def run_tiktok(args: argparse.Namespace) -> int:
             client_secret=args.client_secret,
             refresh_token=current_token["refresh_token"],
         )
+        if not _has_access_token(token_data):
+            _print_token_error("Token refresh failed", token_data)
+            return 1
         save_token_file(args.token_file, token_data)
         print(f"Token refreshed: {Path(args.token_file).resolve()}")
         return 0
 
     if args.tiktok_command == "fetch-user":
         token_data = load_token_file(args.token_file)
-        user_data = fetch_user_info(token_data["access_token"], parse_fields(args.fields, DEFAULT_USER_FIELDS))
+        access_token = _access_token_or_none(token_data)
+        if not access_token:
+            return 1
+        user_data = fetch_user_info(access_token, parse_fields(args.fields, DEFAULT_USER_FIELDS))
         write_json(args.output, user_data)
         print(f"User info saved: {Path(args.output).resolve()}")
         return 0
 
     if args.tiktok_command == "fetch-videos":
         token_data = load_token_file(args.token_file)
+        access_token = _access_token_or_none(token_data)
+        if not access_token:
+            return 1
         video_data = fetch_video_list(
-            access_token=token_data["access_token"],
+            access_token=access_token,
             fields=parse_fields(args.fields, DEFAULT_VIDEO_FIELDS),
             max_count=args.max_count,
             max_pages=args.max_pages,
@@ -206,6 +219,24 @@ def run_tiktok(args: argparse.Namespace) -> int:
         return 0
 
     raise ValueError(f"Unknown tiktok command: {args.tiktok_command}")
+
+
+def _has_access_token(token_data: dict[str, object]) -> bool:
+    return isinstance(token_data.get("access_token"), str) and bool(token_data["access_token"])
+
+
+def _access_token_or_none(token_data: dict[str, object]) -> str | None:
+    access_token = token_data.get("access_token")
+    if isinstance(access_token, str) and access_token:
+        return access_token
+    _print_token_error("Token file does not contain access_token", token_data)
+    return None
+
+
+def _print_token_error(prefix: str, token_data: dict[str, object]) -> None:
+    error = token_data.get("error") or "unknown_error"
+    description = token_data.get("error_description") or "No error_description returned."
+    print(f"{prefix}: {error} - {description}", file=sys.stderr)
 
 
 def main() -> int:
