@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy Policy - SNS Analyst Agent</title>
+  <style>
+    body { margin: 0; font-family: Arial, sans-serif; line-height: 1.6; color: #242424; background: #fff; }
+    main { max-width: 880px; margin: 0 auto; padding: 48px 24px; }
+    h1 { font-size: 32px; }
+    h2 { margin-top: 30px; font-size: 21px; }
+    a { color: #b91c5c; }
+    footer { margin-top: 44px; color: #666; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <main>
+    <p><a href="index.html">Back to home</a></p>
+    <h1>Privacy Policy</h1>
+    <p>This Privacy Policy explains how SNS Analyst Agent handles data when used as a local TikTok analytics tool.</p>
+
+    <h2>Data the tool may access</h2>
+    <p>With the user's authorization through TikTok Login Kit, the tool may access the following information depending on approved scopes:</p>
+    <ul>
+      <li>Basic TikTok profile information such as open ID, avatar, and display name.</li>
+      <li>Profile fields such as bio description, profile links, and verification status.</li>
+      <li>Account summary statistics such as follower count, following count, likes count, and video count.</li>
+      <li>Public video metadata such as video ID, title, description, create time, duration, cover image URL, share URL, embed link, view count, like count, comment count, and share count.</li>
+    </ul>
+
+    <h2>Local storage</h2>
+    <p>The tool stores fetched data locally on the user's computer as JSON, CSV, token, and Markdown report files. The project does not operate a hosted backend service that collects TikTok account data.</p>
+
+    <h2>Third-party sharing</h2>
+    <p>The tool does not automatically send TikTok data to third-party services. If the user explicitly enables an optional external LLM provider, selected local summary data may be sent to that provider for report generation according to the user's configuration and that provider's terms.</p>
+
+    <h2>Token handling</h2>
+    <p>OAuth access and refresh tokens are saved locally when the user chooses to store them. Users can delete the local token file at any time to remove local access credentials.</p>
+
+    <h2>Data deletion</h2>
+    <p>Users control local files created by the tool and may delete generated JSON, CSV, token, and report files from their computer at any time.</p>
+
+    <h2>Contact</h2>
+    <p>If this tool is published as a GitHub repository, issues and privacy questions can be submitted through the repository's issue tracker.</p>
+
+    <footer>
+      <p>Last updated: May 11, 2026</p>
+    </footer>
+  </main>
+</body>
+</html>
