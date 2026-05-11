@@ -46,10 +46,7 @@ def summarize_api_posts(rows: list[dict[str, Any]], now: datetime | None = None)
     recent10 = sorted(dated, key=lambda row: row["posted_dt"], reverse=True)[:10]
     recent30 = [row for row in dated if row["posted_dt"] >= now - timedelta(days=30)]
     sorted_dates = sorted(row["posted_dt"] for row in dated)
-    gaps = [
-        (sorted_dates[index] - sorted_dates[index - 1]).days
-        for index in range(1, len(sorted_dates))
-    ]
+    gaps = [(sorted_dates[index] - sorted_dates[index - 1]).days for index in range(1, len(sorted_dates))]
     return {
         "post_count": len(rows),
         "average_views": mean(views),
@@ -132,5 +129,5 @@ def _data_quality_note(posts_with_missing_views: int, posts_with_missing_rate_in
         return "主要KPIの入力は揃っています。"
     return (
         f"データ不足: 再生数未入力 {posts_with_missing_views}件、"
-        f"率計算に必要な入力の不足 {posts_with_missing_rate_inputs}件があります。"
+        f"率計算に必要な入力不足 {posts_with_missing_rate_inputs}件があります。"
     )

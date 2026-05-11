@@ -67,9 +67,9 @@ def parse_bool(value: Any) -> bool | None:
     text = str(value).strip().lower()
     if not text:
         return None
-    if text in {"true", "yes", "y", "1", "あり", "有", "可", "ok"}:
+    if text in {"true", "yes", "y", "1", "あり", "有", "可", "ok", "縺ゅｊ", "譛・", "蜿ｯ"}:
         return True
-    if text in {"false", "no", "n", "0", "なし", "無", "不可", "ng"}:
+    if text in {"false", "no", "n", "0", "なし", "無", "不可", "ng", "縺ｪ縺・", "辟｡", "荳榊庄"}:
         return False
     return None
 
@@ -79,7 +79,7 @@ def split_tags(value: Any) -> list[str]:
         return []
     if isinstance(value, list):
         return [str(item).strip() for item in value if str(item).strip()]
-    text = str(value).replace("、", " ").replace(",", " ").replace("\n", " ")
+    text = str(value).replace("、", " ").replace("縲・", " ").replace(",", " ").replace("\n", " ")
     return [part.strip() for part in text.split() if part.strip()]
 
 

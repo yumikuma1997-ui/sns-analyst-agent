@@ -1,6 +1,6 @@
 # TikTok Analysis Tool
 
-TikTok公式APIで取得できる公開動画データと、運用者が手入力するTikTok Studio/クリエイティブ/トレンド/参考投稿メモを分けて分析するローカルCLIツールです。
+TikTok公式APIで取得できる公開動画データと、運用者が手入力するTikTok Studio / クリエイティブ / トレンド / 参考アカウントメモを分けて分析するローカルCLIツールです。
 
 このツールはスクレイピング、自動ログイン、自動投稿、自動いいね、自動フォロー、自動コメントを行いません。
 
@@ -8,9 +8,7 @@ TikTok公式APIで取得できる公開動画データと、運用者が手入�
 
 ### `data/api_posts.sample.csv`
 
-TikTok公式APIから取得できる投稿データです。
-
-代表カラム:
+TikTok公式APIから取得できる投稿データです。主なカラム:
 
 - `video_id`
 - `create_time`
@@ -53,17 +51,17 @@ TikTok公式APIから取得できる投稿データです。
 
 TikTok Studioやアプリ内インサイトから手動転記する深い指標です。
 
-例:
+最小入力推奨カラム:
 
+- `video_id`
 - `saves`
 - `profile_views`
 - `follows_from_video`
 - `average_watch_time`
 - `completion_rate`
 - `traffic_source_for_you`
-- `audience_gender`
-- `audience_age_range`
-- `audience_region`
+- `traffic_source_search`
+- `measured_after_hours`
 
 このファイルがない場合、保存率、フォロー転換率、完視聴率、平均視聴時間、プロフィール遷移率は「データ不足」と表示します。
 
@@ -71,8 +69,9 @@ TikTok Studioやアプリ内インサイトから手動転記する深い指標�
 
 運用者が動画を見て記録する定性メモです。
 
-例:
+最小入力推奨カラム:
 
+- `video_id`
 - `account_strategy_category`
 - `content_category`
 - `is_pr`
@@ -81,8 +80,6 @@ TikTok Studioやアプリ内インサイトから手動転記する深い指標�
 - `first_3sec_summary`
 - `video_structure`
 - `cta_type`
-- `face_visible`
-- `voiceover`
 - `text_density`
 - `save_reason`
 - `comment_prompt`
@@ -149,6 +146,25 @@ python src/main.py report `
 
 `manual_insights`、`creative_notes`、`trend_research`、`competitor_posts` は存在しなくても実行できます。その場合、レポート内に不足理由と入力先が表示されます。
 
+## レポートの考え方
+
+レポートでは以下を明確に分けます。
+
+- 公式APIで取得できる事実
+- 手入力が必要な指標
+- 推測を含む改善提案
+
+レポート冒頭には `Executive Summary` を出力します。信頼度は以下の2つに分けています。
+
+- `API集計信頼度`: APIで取得した数値集計をどの程度信じられるか
+- `戦略提案信頼度`: クリエイティブ・トレンド・競合メモを含む改善提案をどの程度信じられるか
+
+`manual_insights` / `creative_notes` / `trend_research` / `competitor_posts` のいずれかが0件の場合、戦略提案信頼度はC以下に制限されます。
+
+保存率、プロフィール遷移率、フォロー転換率、完視聴率、平均視聴維持率、流入元別成果は、`manual_insights.csv` に入力がない限り分析しません。
+
+冒頭3秒、動画構成、CTA、顔出し、声出し、PR有無、テロップ密度は、`creative_notes.csv` に入力がない限り断定しません。
+
 ## TikTok公式API PoC
 
 OAuth URL生成:
@@ -199,30 +215,16 @@ python src/main.py tiktok normalize-videos `
   --output data/tiktok_videos.local.csv
 ```
 
-## レポートの考え方
-
-- 公式APIで取得できる事実
-- 手入力が必要な指標
-- 推測による改善提案
-
-この3つを明確に分けます。
-
-保存率、プロフィール遷移率、フォロー転換率、完視聴率、平均視聴維持率、流入元別成果は、`manual_insights.csv` に入力がない限り分析しません。
-
-冒頭3秒、動画構成、CTA、顔出し、声出し、PR有無、テロップ密度は、`creative_notes.csv` に入力がない限り断定しません。
-
 ## テスト
 
 ```powershell
 python -m unittest discover -s tests
 ```
 
-## 今後の拡張候補
+## 今後の改善候補
 
 - TikTok Creative Centerの手動調査結果CSVを増やす
 - Google Trendsの美容キーワードCSVを取り込む
 - 過去レポートとの比較
 - 投稿カレンダー生成
 - LLM APIによる定性分析補助
-
-LLMを使う場合でも、公式APIで取れていない指標を取れている前提で補完しないでください。
