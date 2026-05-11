@@ -44,6 +44,13 @@ class TikTokApiTest(unittest.TestCase):
         self.assertEqual(pkce["code_challenge"], build_code_challenge(pkce["code_verifier"]))
         self.assertEqual(pkce["code_challenge_method"], "S256")
 
+    def test_code_challenge_uses_sha256_hex_for_tiktok_desktop(self):
+        verifier = "abc"
+        self.assertEqual(
+            build_code_challenge(verifier),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        )
+
     def test_normalize_video_list_raw(self):
         raw = {
             "source": "tiktok_display_api_video_list",

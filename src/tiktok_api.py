@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import csv
-import base64
 import hashlib
 import json
 import secrets
@@ -98,8 +97,7 @@ def generate_code_verifier(length: int = 64) -> str:
 
 
 def build_code_challenge(code_verifier: str) -> str:
-    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
-    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+    return hashlib.sha256(code_verifier.encode("ascii")).hexdigest()
 
 
 def create_pkce_pair() -> dict[str, str]:
